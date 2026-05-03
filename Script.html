@@ -616,7 +616,12 @@
 
   function setPhaseClasses(shellId, modeClass, phase, activeKey) {
     const shell = byId(shellId);
-    shell.className = `game-shell ${modeClass} phase-${phase} active-${activeKey}`;
+    const activeClass = activeKey === 'patientA'
+      ? 'active-patient-a'
+      : activeKey === 'patientB'
+        ? 'active-patient-b'
+        : 'active-single-patient';
+    shell.className = `game-shell ${modeClass} phase-${phase} ${activeClass}`;
     shell.classList.toggle('is-removing', phase === 'a_remove' || phase === 'b_remove' || phase === 'extra_remove');
   }
 
