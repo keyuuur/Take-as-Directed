@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
   <head>
     <base target="_top">
@@ -11,10 +11,15 @@
   </head>
   <body>
     <div class="app-shell">
-      <section id="screen-login" class="screen active">
-        <div class="simple-card login-card">
-          <h1>Take as Directed</h1>
-          <p class="muted">Antibiotic resistance simulation</p>
+      <section id="screen-login" class="screen active mission-screen">
+        <div class="mission-card login-card">
+          <div class="brand-lockup">
+            <div class="brand-flask">Rx</div>
+            <div>
+              <h1>Take as Directed</h1>
+              <p>Antibiotic resistance simulation</p>
+            </div>
+          </div>
           <div class="field">
             <label for="studentName">Full name</label>
             <input id="studentName" type="text" maxlength="80" placeholder="First and last name">
@@ -23,17 +28,20 @@
             <label for="periodSelect">Period</label>
             <select id="periodSelect"></select>
           </div>
-          <button id="startBtn" class="btn btn-primary">Continue</button>
+          <button id="startBtn" class="btn btn-primary">Start Mission</button>
           <p id="loginError" class="error hidden"></p>
         </div>
       </section>
 
-      <section id="screen-mode" class="screen">
-        <div class="simple-card mode-card-wrap">
+      <section id="screen-mode" class="screen mission-screen">
+        <div class="mission-card mode-card-wrap">
           <div class="mode-top">
-            <div>
-              <h1>Take as Directed</h1>
-              <p class="muted">Choose a mode</p>
+            <div class="brand-lockup compact">
+              <div class="brand-flask">Rx</div>
+              <div>
+                <h1>Take as Directed</h1>
+                <p>Choose your mission</p>
+              </div>
             </div>
             <div id="studentBadge" class="student-pill hidden"></div>
           </div>
@@ -41,203 +49,346 @@
             <article class="mode-card required">
               <span class="pill pill-blue">Required - 20 points</span>
               <h2>Compare Two Patients</h2>
-              <p>Compare a patient who takes antibiotics as directed with a patient who misses some doses.</p>
-              <button id="openCompareBtn" class="btn btn-primary">Open compare mode</button>
+              <p>Run two antibiotic paths and compare how consistent dosing changes the bacteria population.</p>
+              <button id="openCompareBtn" class="btn btn-primary">Open Compare Mode</button>
             </article>
             <article class="mode-card extra">
               <span class="pill pill-orange">Extra credit - 10 points</span>
               <h2>Run Your Own Patient</h2>
-              <p>Run one random patient, answer reflection questions, and submit it for extra credit.</p>
-              <button id="openExtraBtn" class="btn btn-secondary">Open extra-credit mode</button>
+              <p>Roll each round, follow the dose result, and use your graph for extra-credit reflection.</p>
+              <button id="openExtraBtn" class="btn btn-secondary">Open Extra Credit</button>
             </article>
           </div>
         </div>
       </section>
 
-      <section id="screen-compare" class="screen">
-        <div class="sim-header blue-theme clinical-header">
-          <div class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></div>
-          <div id="compareHeaderTitle" class="clinical-title">Take as Directed: Antibiotic Adherence Simulation - Compare Mode (Round 0)</div>
-          <div class="sim-header-right">
-            <div id="compareRoundPill" class="header-pill">Round 0 of 8</div>
-            <div id="compareStudentPill" class="header-pill light"></div>
+      <section id="screen-compare" class="screen arcade-screen">
+        <div class="game-shell mode-compare" id="compareGameShell">
+          <header class="hud-top">
+            <div class="logo-panel">
+              <div class="logo-mark">Rx</div>
+              <div>
+                <div class="logo-title">Take as Directed</div>
+                <div class="logo-sub">Arcade Lung Lab</div>
+              </div>
+            </div>
+            <div class="title-panel">
+              <div id="compareHeaderTitle" class="arcade-title">Antibiotic Run</div>
+              <p>Eliminate bacteria. Stop resistance. Save the patient.</p>
+            </div>
+            <div id="compareRoundPill" class="round-badge">Round 0 of 8</div>
+            <div class="turn-panel">
+              <span>Your Turn</span>
+              <strong id="compareStudentPill">Student</strong>
+              <em id="compareActivePatientLabel">Mission ready</em>
+            </div>
+            <button id="compareEmergencyBtn" class="btn utility-submit">Emergency Submit</button>
+          </header>
+
+          <section class="directive-strip">
+            <div>
+              <div id="compareDirectiveTitle" class="directive-title">Mission Ready</div>
+              <div id="compareDirectiveSub" class="directive-sub">Start compare mode to enter the lung infection zone.</div>
+            </div>
+            <div class="removal-badge">
+              <span>Remaining removals</span>
+              <strong id="compareRemainingBadge">0</strong>
+            </div>
+          </section>
+
+          <main class="simulation-grid">
+            <aside class="side-stack left-stack">
+              <div class="hud-card patient-card">
+                <h3 id="compareCurrentPatient">Compare Mode</h3>
+                <div id="compareActionTitle" class="action-heading">Your action</div>
+                <p id="compareActionText">Click Start compare mode to begin.</p>
+              </div>
+              <div class="hud-card roll-card">
+                <h3>Roll Result</h3>
+                <div class="dice-row">
+                  <span class="die-face">1</span>
+                  <span class="die-face">6</span>
+                </div>
+                <div id="compareBRollBadge" class="roll-readout">Last roll: -</div>
+                <div class="mini-stat">
+                  <strong id="compareMissedStatus">0 so far</strong>
+                  <span>Patient B missed doses</span>
+                </div>
+              </div>
+              <div class="hud-card key-card">
+                <h3>Resistance Key</h3>
+                <p><span class="key-dot red"></span>Red = low resistance</p>
+                <p><span class="key-dot blue"></span>Blue = medium resistance</p>
+                <p><span class="key-dot yellow"></span>Yellow = high resistance</p>
+              </div>
+              <div class="hud-card tip-card">
+                <h3>Science Tip</h3>
+                <p>Remove red first, then blue, then yellow. Survivors reproduce after the dose phase.</p>
+              </div>
+            </aside>
+
+            <section class="battle-stage">
+              <div id="compareInstruction" class="instruction-feed">Start the mission when ready.</div>
+              <div class="compare-board-pair">
+                <article id="comparePatientACard" class="patient-panel panel-a">
+                  <div class="patient-head">
+                    <div>
+                      <h2>Patient A</h2>
+                      <p>Consistent doses</p>
+                    </div>
+                    <div id="compareAHeaderBadge" class="small-status dose-good">Dose: taken</div>
+                  </div>
+                  <div id="compareABoard" class="anatomy-board"></div>
+                  <div id="compareAStatsBox" class="counts-box"></div>
+                  <div id="compareAStep" class="step-box"></div>
+                </article>
+
+                <article id="comparePatientBCard" class="patient-panel panel-b">
+                  <div class="patient-head">
+                    <div>
+                      <h2>Patient B</h2>
+                      <p>Missed doses</p>
+                    </div>
+                    <div id="compareBHeaderBadge" class="small-status dose-wait">Waiting</div>
+                  </div>
+                  <div id="compareBBoard" class="anatomy-board"></div>
+                  <div id="compareBStatsBox" class="counts-box"></div>
+                  <div id="compareBStep" class="step-box"></div>
+                </article>
+              </div>
+            </section>
+
+            <aside class="side-stack right-stack">
+              <div class="hud-card count-card">
+                <h3>Bacteria Count</h3>
+                <div id="compareCountSummary" class="summary-counts"></div>
+              </div>
+              <div class="hud-card chart-card">
+                <h3>Patient A Trend</h3>
+                <div id="compareAChart" class="chart"></div>
+              </div>
+              <div class="hud-card chart-card">
+                <h3>Patient B Trend</h3>
+                <div id="compareBChart" class="chart"></div>
+              </div>
+            </aside>
+          </main>
+
+          <section class="action-bar">
+            <button id="compareMainBtn" class="btn btn-start hidden">Start Compare Mode</button>
+            <button id="compareRollBtn" class="btn btn-roll hidden">Roll for Patient B</button>
+            <div id="compareRemoveControls" class="remove-controls hidden">
+              <button class="remove-btn red" data-color="red">
+                <span class="button-microbe red"></span>
+                <strong>Remove Red</strong>
+                <em>Low resistance</em>
+                <span class="remove-count" data-color-count="red">0</span>
+              </button>
+              <button class="remove-btn blue" data-color="blue">
+                <span class="button-microbe blue"></span>
+                <strong>Remove Blue</strong>
+                <em>Medium resistance</em>
+                <span class="remove-count" data-color-count="blue">0</span>
+              </button>
+              <button class="remove-btn yellow" data-color="yellow">
+                <span class="button-microbe yellow"></span>
+                <strong>Remove Yellow</strong>
+                <em>High resistance</em>
+                <span class="remove-count" data-color-count="yellow">0</span>
+              </button>
+            </div>
+            <div id="compareRemoveInfo" class="remove-info"></div>
+          </section>
+
+          <footer class="footer-hud">
+            <div class="footer-tile progress-tile">
+              <span>Mission Progress</span>
+              <div id="compareProgressDots" class="round-dots"></div>
+            </div>
+            <div class="footer-tile">
+              <span>Round Status</span>
+              <strong id="compareRoundStatus">0 of 8</strong>
+            </div>
+            <div class="footer-tile">
+              <span>Patient Status</span>
+              <strong id="comparePatientStatusTile">Stable</strong>
+            </div>
+            <div class="footer-tile">
+              <span>Assignment</span>
+              <strong id="compareScoreTile">20 pts</strong>
+            </div>
+            <div class="footer-tile achievement">
+              <span>Feedback</span>
+              <strong id="compareAchievementTile">Red first wins.</strong>
+            </div>
+          </footer>
+
+          <div id="compareReflectionWrap" class="reflection-wrap hidden">
+            <div id="compareSummary" class="summary-box"></div>
+            <div id="compareReflectionQuestions"></div>
+            <div class="footer-actions">
+              <button id="compareSubmitBtn" class="btn btn-primary">Submit compare mode</button>
+              <button id="backToModesBtn1" class="btn btn-secondary">Back to mode select</button>
+            </div>
           </div>
-        </div>
-
-        <div class="lab-dashboard compare-layout">
-          <div class="simulation-area">
-            <div class="patients-grid">
-              <article class="patient-panel panel-a">
-                <div class="patient-head">
-                  <div>
-                    <h2>Patient A</h2>
-                    <p>Consistent doses</p>
-                  </div>
-                  <div id="compareAHeaderBadge" class="small-status dose-good">Dose: taken</div>
-                </div>
-                <div id="compareABoard" class="anatomy-board"></div>
-                <div id="compareAStatsBox" class="counts-box"></div>
-                <div id="compareAStep" class="step-box"></div>
-              </article>
-
-              <article class="patient-panel panel-b">
-                <div class="patient-head">
-                  <div>
-                    <h2>Patient B</h2>
-                    <p>Missed doses</p>
-                  </div>
-                  <div class="roll-stack">
-                    <div id="compareBRollBadge" class="small-status roll-badge">Last roll: -</div>
-                    <div id="compareBHeaderBadge" class="small-status dose-miss">Waiting</div>
-                  </div>
-                </div>
-                <div id="compareBBoard" class="anatomy-board"></div>
-                <div id="compareBStatsBox" class="counts-box"></div>
-                <div id="compareBStep" class="step-box"></div>
-              </article>
-            </div>
-
-            <div class="status-strip">
-              <div class="status-item"><span>Round</span><strong id="compareRoundStatus">0 of 8</strong></div>
-              <div class="status-item"><span>Patient B missed doses</span><strong id="compareMissedStatus">0 so far</strong></div>
-            </div>
-
-            <div class="control-panel">
-              <div class="instruction-bar">
-                <strong id="compareActionTitle">Your action</strong>
-                <span id="compareInstruction"></span>
-              </div>
-              <p id="compareActionText" class="action-copy"></p>
-
-              <div class="controls-row">
-                <button id="compareMainBtn" class="btn btn-primary hidden">Take Dose</button>
-                <button id="compareRollBtn" class="btn btn-miss hidden">Roll for Patient B</button>
-                <div id="compareRemoveControls" class="remove-controls hidden">
-                  <button class="remove-btn red" data-color="red"><span>Red Remove</span><span class="remove-count" data-color-count="red">0</span></button>
-                  <button class="remove-btn blue" data-color="blue"><span>Blue Remove</span><span class="remove-count" data-color-count="blue">0</span></button>
-                  <button class="remove-btn yellow" data-color="yellow"><span>Yellow Remove</span><span class="remove-count" data-color-count="yellow">0</span></button>
-                </div>
-                <button id="compareEmergencyBtn" class="btn btn-danger">Emergency Submit</button>
-              </div>
-
-              <div id="compareRemoveInfo" class="remove-info"></div>
-              <div class="rule-box">
-                <strong>Rules</strong>
-                <ul>
-                  <li>Remove 5 starting with red, then blue, then yellow.</li>
-                  <li>After treatment or a missed dose, remaining bacteria reproduce.</li>
-                </ul>
-              </div>
-            </div>
-
-            <div id="compareReflectionWrap" class="reflection-wrap hidden">
-              <div id="compareSummary" class="summary-box"></div>
-              <div id="compareReflectionQuestions"></div>
-              <div class="footer-actions">
-                <button id="compareSubmitBtn" class="btn btn-primary">Submit compare mode</button>
-                <button id="backToModesBtn1" class="btn btn-secondary">Back to mode select</button>
-              </div>
-            </div>
-          </div>
-
-          <aside class="charts-sidebar">
-            <div class="graph-card">
-              <h3>Total Bacterial Count Over Rounds (Patient A)</h3>
-              <div id="compareAChart" class="chart"></div>
-            </div>
-            <div class="graph-card">
-              <h3>Total Bacterial Count Over Rounds (Patient B)</h3>
-              <div id="compareBChart" class="chart"></div>
-            </div>
-          </aside>
         </div>
       </section>
 
-      <section id="screen-extra" class="screen">
-        <div class="sim-header orange-theme clinical-header">
-          <div class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></div>
-          <div id="extraHeaderTitle" class="clinical-title">Take as Directed: Antibiotic Adherence Simulation - Extra Mode (Round 0)</div>
-          <div class="sim-header-right">
-            <div id="extraRoundPill" class="header-pill">Round 0 of 8</div>
-            <div id="extraStudentPill" class="header-pill light"></div>
-          </div>
-        </div>
+      <section id="screen-extra" class="screen arcade-screen">
+        <div class="game-shell mode-extra" id="extraGameShell">
+          <header class="hud-top">
+            <div class="logo-panel">
+              <div class="logo-mark">Rx</div>
+              <div>
+                <div class="logo-title">Take as Directed</div>
+                <div class="logo-sub">Arcade Lung Lab</div>
+              </div>
+            </div>
+            <div class="title-panel">
+              <div id="extraHeaderTitle" class="arcade-title">Antibiotic Run</div>
+              <p>Roll the dose. Clear bacteria. Track resistance.</p>
+            </div>
+            <div id="extraRoundPill" class="round-badge">Round 0 of 8</div>
+            <div class="turn-panel">
+              <span>Your Turn</span>
+              <strong id="extraStudentPill">Student</strong>
+              <em id="extraActivePatientLabel">Mission ready</em>
+            </div>
+            <button id="extraEmergencyBtn" class="btn utility-submit">Emergency Submit</button>
+          </header>
 
-        <div class="lab-dashboard extra-layout">
-          <div class="simulation-area">
-            <article class="patient-panel panel-extra">
-              <div class="patient-head">
-                <div>
-                  <h2>Your Patient</h2>
-                  <p>Random adherence pattern</p>
+          <section class="directive-strip">
+            <div>
+              <div id="extraDirectiveTitle" class="directive-title">Mission Ready</div>
+              <div id="extraDirectiveSub" class="directive-sub">Start extra-credit mode to enter the lung infection zone.</div>
+            </div>
+            <div class="removal-badge">
+              <span>Remaining removals</span>
+              <strong id="extraRemainingBadge">0</strong>
+            </div>
+          </section>
+
+          <main class="simulation-grid extra-grid">
+            <aside class="side-stack left-stack">
+              <div class="hud-card patient-card">
+                <h3>Your Patient</h3>
+                <div id="extraActionTitle" class="action-heading">Your action</div>
+                <p id="extraActionText">Click Start extra-credit mode to begin.</p>
+              </div>
+              <div class="hud-card roll-card">
+                <h3>Roll Result</h3>
+                <div class="dice-row">
+                  <span class="die-face">1</span>
+                  <span class="die-face">6</span>
                 </div>
-                <div class="roll-stack">
-                  <div id="extraRollBadge" class="small-status roll-badge">Last roll: -</div>
-                  <div id="extraHeaderBadge" class="small-status dose-miss">Waiting</div>
+                <div id="extraRollBadge" class="roll-readout">Last roll: -</div>
+                <div class="mini-stat">
+                  <strong id="extraMissedStatus">0 so far</strong>
+                  <span>Missed doses</span>
                 </div>
               </div>
-              <div class="single-patient-body">
+              <div class="hud-card key-card">
+                <h3>Resistance Key</h3>
+                <p><span class="key-dot red"></span>Red = low resistance</p>
+                <p><span class="key-dot blue"></span>Blue = medium resistance</p>
+                <p><span class="key-dot yellow"></span>Yellow = high resistance</p>
+              </div>
+              <div class="hud-card tip-card">
+                <h3>Science Tip</h3>
+                <p>Missed doses remove nothing. Any surviving color still adds one new bacterium.</p>
+              </div>
+            </aside>
+
+            <section class="battle-stage">
+              <div id="extraInstruction" class="instruction-feed">Start the mission when ready.</div>
+              <article id="extraPatientCard" class="patient-panel panel-extra active-patient">
+                <div class="patient-head">
+                  <div>
+                    <h2>Your Patient</h2>
+                    <p>Random adherence pattern</p>
+                  </div>
+                  <div id="extraHeaderBadge" class="small-status dose-wait">Waiting</div>
+                </div>
                 <div id="extraBoard" class="anatomy-board"></div>
                 <div id="extraStatsBox" class="counts-box"></div>
-              </div>
-              <div id="extraStep" class="step-box"></div>
-            </article>
+                <div id="extraStep" class="step-box"></div>
+              </article>
+            </section>
 
-            <div class="status-strip">
-              <div class="status-item"><span>Round</span><strong id="extraRoundStatus">0 of 8</strong></div>
-              <div class="status-item"><span>Missed doses</span><strong id="extraMissedStatus">0 so far</strong></div>
+            <aside class="side-stack right-stack">
+              <div class="hud-card count-card">
+                <h3>Bacteria Count</h3>
+                <div id="extraCountSummary" class="summary-counts"></div>
+              </div>
+              <div class="hud-card chart-card">
+                <h3>Resistance Over Time</h3>
+                <div id="extraChart" class="chart"></div>
+              </div>
+            </aside>
+          </main>
+
+          <section class="action-bar">
+            <button id="extraMainBtn" class="btn btn-start hidden">Start Extra Credit</button>
+            <button id="extraRollBtn" class="btn btn-roll hidden">Roll the Die</button>
+            <div id="extraRemoveControls" class="remove-controls hidden">
+              <button class="remove-btn red" data-color="red">
+                <span class="button-microbe red"></span>
+                <strong>Remove Red</strong>
+                <em>Low resistance</em>
+                <span class="remove-count" data-color-count="red">0</span>
+              </button>
+              <button class="remove-btn blue" data-color="blue">
+                <span class="button-microbe blue"></span>
+                <strong>Remove Blue</strong>
+                <em>Medium resistance</em>
+                <span class="remove-count" data-color-count="blue">0</span>
+              </button>
+              <button class="remove-btn yellow" data-color="yellow">
+                <span class="button-microbe yellow"></span>
+                <strong>Remove Yellow</strong>
+                <em>High resistance</em>
+                <span class="remove-count" data-color-count="yellow">0</span>
+              </button>
             </div>
+            <div id="extraRemoveInfo" class="remove-info"></div>
+          </section>
 
-            <div class="control-panel">
-              <div class="instruction-bar">
-                <strong id="extraActionTitle">Your action</strong>
-                <span id="extraInstruction"></span>
-              </div>
-              <p id="extraActionText" class="action-copy"></p>
-
-              <div class="controls-row">
-                <button id="extraMainBtn" class="btn btn-primary hidden">Start extra-credit mode</button>
-                <button id="extraRollBtn" class="btn btn-miss hidden">Roll the die</button>
-                <div id="extraRemoveControls" class="remove-controls hidden">
-                  <button class="remove-btn red" data-color="red"><span>Red Remove</span><span class="remove-count" data-color-count="red">0</span></button>
-                  <button class="remove-btn blue" data-color="blue"><span>Blue Remove</span><span class="remove-count" data-color-count="blue">0</span></button>
-                  <button class="remove-btn yellow" data-color="yellow"><span>Yellow Remove</span><span class="remove-count" data-color-count="yellow">0</span></button>
-                </div>
-                <button id="extraEmergencyBtn" class="btn btn-danger">Emergency Submit</button>
-              </div>
-
-              <div id="extraRemoveInfo" class="remove-info"></div>
-              <div class="rule-box">
-                <strong>Rules</strong>
-                <ul>
-                  <li>Roll each round.</li>
-                  <li>2, 3, 4, 5 = dose taken.</li>
-                  <li>1 or 6 = dose missed.</li>
-                </ul>
-              </div>
+          <footer class="footer-hud">
+            <div class="footer-tile progress-tile">
+              <span>Mission Progress</span>
+              <div id="extraProgressDots" class="round-dots"></div>
             </div>
+            <div class="footer-tile">
+              <span>Round Status</span>
+              <strong id="extraRoundStatus">0 of 8</strong>
+            </div>
+            <div class="footer-tile">
+              <span>Patient Status</span>
+              <strong id="extraPatientStatusTile">Stable</strong>
+            </div>
+            <div class="footer-tile">
+              <span>Assignment</span>
+              <strong id="extraScoreTile">10 pts</strong>
+            </div>
+            <div class="footer-tile achievement">
+              <span>Feedback</span>
+              <strong id="extraAchievementTile">Roll, treat, reflect.</strong>
+            </div>
+          </footer>
 
-            <div id="extraReflectionWrap" class="reflection-wrap hidden">
-              <div id="extraSummary" class="summary-box"></div>
-              <div id="extraReflectionQuestions"></div>
-              <div class="footer-actions">
-                <button id="extraSubmitBtn" class="btn btn-primary">Submit extra credit</button>
-                <button id="backToModesBtn2" class="btn btn-secondary">Back to mode select</button>
-              </div>
+          <div id="extraReflectionWrap" class="reflection-wrap hidden">
+            <div id="extraSummary" class="summary-box"></div>
+            <div id="extraReflectionQuestions"></div>
+            <div class="footer-actions">
+              <button id="extraSubmitBtn" class="btn btn-primary">Submit extra credit</button>
+              <button id="backToModesBtn2" class="btn btn-secondary">Back to mode select</button>
             </div>
           </div>
-
-          <aside class="charts-sidebar">
-            <div class="graph-card">
-              <h3>Total Bacterial Count Over Rounds</h3>
-              <div id="extraChart" class="chart"></div>
-            </div>
-          </aside>
         </div>
       </section>
 
-      <section id="screen-finish" class="screen">
-        <div class="simple-card finish-card">
+      <section id="screen-finish" class="screen mission-screen">
+        <div class="mission-card finish-card">
           <h1>Submitted</h1>
           <div id="finishMessage"></div>
           <button id="finishBackBtn" class="btn btn-secondary">Back to mode select</button>
@@ -247,7 +398,7 @@
 
     <div id="overlay" class="overlay hidden">
       <div class="overlay-card">
-        <h2 id="overlayTitle">REMAINING BACTERIA REPRODUCE!</h2>
+        <h2 id="overlayTitle">SURVIVORS REPRODUCE</h2>
         <p id="overlayText"></p>
         <button id="overlayContinueBtn" class="btn btn-success">Continue</button>
       </div>
