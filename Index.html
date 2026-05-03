@@ -103,13 +103,12 @@
                 <div id="compareActionTitle" class="action-heading">Your action</div>
                 <p id="compareActionText">Click Start compare mode to begin.</p>
               </div>
-              <div class="hud-card roll-card">
-                <h3>Roll Result</h3>
+              <div id="compareRollCard" class="hud-card roll-card">
+                <h3>1-Die Roll</h3>
                 <div class="dice-row">
-                  <span class="die-face">1</span>
-                  <span class="die-face">6</span>
+                  <span id="compareRollDie" class="die-face die-empty">?</span>
                 </div>
-                <div id="compareBRollBadge" class="roll-readout">Last roll: -</div>
+                <div id="compareBRollBadge" class="roll-readout" aria-live="polite">Waiting for Patient B</div>
                 <div class="mini-stat">
                   <strong id="compareMissedStatus">0 so far</strong>
                   <span>Patient B missed doses</span>
@@ -275,13 +274,12 @@
                 <div id="extraActionTitle" class="action-heading">Your action</div>
                 <p id="extraActionText">Click Start extra-credit mode to begin.</p>
               </div>
-              <div class="hud-card roll-card">
-                <h3>Roll Result</h3>
+              <div id="extraRollCard" class="hud-card roll-card">
+                <h3>1-Die Roll</h3>
                 <div class="dice-row">
-                  <span class="die-face">1</span>
-                  <span class="die-face">6</span>
+                  <span id="extraRollDie" class="die-face die-empty">?</span>
                 </div>
-                <div id="extraRollBadge" class="roll-readout">Last roll: -</div>
+                <div id="extraRollBadge" class="roll-readout" aria-live="polite">Tap Roll when ready</div>
                 <div class="mini-stat">
                   <strong id="extraMissedStatus">0 so far</strong>
                   <span>Missed doses</span>

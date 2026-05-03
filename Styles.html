@@ -542,21 +542,70 @@
 
   .dice-row {
     display: flex;
+    justify-content: center;
     gap: 7px;
-    margin: 7px 0;
+    margin: 8px 0 9px;
   }
 
   .die-face {
     display: grid;
     place-items: center;
-    width: 42px;
-    height: 42px;
-    border-radius: 10px;
+    width: 72px;
+    height: 72px;
+    border-radius: 16px;
     color: #160b2b;
     background: radial-gradient(circle at 32% 25%, #ffffff, #d4c5ff 54%, #7d4dda);
-    font-size: 22px;
+    font-size: 42px;
     font-weight: 1000;
     box-shadow: 0 0 18px rgba(157, 77, 255, 0.46);
+  }
+
+  .roll-card {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .roll-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 36%, rgba(255, 201, 40, 0.22), transparent 48%);
+    transition: opacity 160ms ease;
+  }
+
+  .roll-card.is-roll-phase {
+    border-color: rgba(255, 201, 40, 0.72);
+    box-shadow: var(--shadow-yellow), inset 0 0 24px rgba(255, 201, 40, 0.11);
+  }
+
+  .roll-card.is-roll-phase::after {
+    opacity: 1;
+  }
+
+  .die-ready {
+    color: #2a1c00;
+    background: radial-gradient(circle at 32% 25%, #fff9cf, #ffc928 58%, #a96a00);
+    box-shadow: var(--shadow-yellow);
+  }
+
+  .die-taken {
+    color: #031022;
+    background: radial-gradient(circle at 32% 25%, #ffffff, #78d6ff 58%, #2388ff);
+    box-shadow: var(--shadow-blue);
+  }
+
+  .die-missed {
+    color: #2b0000;
+    background: radial-gradient(circle at 32% 25%, #ffe9e8, #ff6f68 58%, #a60c18);
+    box-shadow: var(--shadow-red);
+  }
+
+  .die-empty {
+    color: #8aa3c4;
+    background: radial-gradient(circle at 32% 25%, #e3edf8, #5e7594 58%, #18263d);
+    box-shadow: 0 0 14px rgba(120, 160, 210, 0.22);
   }
 
   .roll-readout,
@@ -572,6 +621,25 @@
     text-transform: uppercase;
     border: 1px solid rgba(255, 255, 255, 0.14);
     background: rgba(255, 255, 255, 0.08);
+  }
+
+  .roll-card .roll-readout {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    text-align: center;
+  }
+
+  .roll-card.roll-taken .roll-readout {
+    color: #bfeaff;
+    border-color: rgba(35, 136, 255, 0.52);
+    background: rgba(35, 136, 255, 0.13);
+  }
+
+  .roll-card.roll-missed .roll-readout {
+    color: #ffd3d0;
+    border-color: rgba(255, 59, 52, 0.58);
+    background: rgba(255, 59, 52, 0.13);
   }
 
   .mini-stat {
@@ -938,6 +1006,15 @@
     justify-self: center;
   }
 
+  .phase-b_roll .action-bar > .btn-roll:not(.hidden),
+  .phase-extra_roll .action-bar > .btn-roll:not(.hidden) {
+    width: min(560px, 100%);
+    min-height: 62px;
+    font-size: 18px;
+    border-color: rgba(255, 201, 40, 0.74);
+    box-shadow: var(--shadow-yellow), 0 0 34px rgba(157, 77, 255, 0.42);
+  }
+
   .remove-controls {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1292,6 +1369,121 @@
 
     .footer-hud {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 981px) and (max-height: 760px) {
+    .game-shell {
+      gap: 5px;
+      padding: 6px;
+    }
+
+    .hud-top {
+      grid-template-columns: minmax(130px, 0.58fr) minmax(280px, 2.65fr) minmax(86px, 0.34fr) minmax(150px, 0.68fr) minmax(88px, 0.36fr);
+      gap: 5px;
+    }
+
+    .logo-panel,
+    .title-panel {
+      min-height: 50px;
+      padding: 6px 8px;
+    }
+
+    .logo-mark {
+      width: 34px;
+      height: 34px;
+      font-size: 13px;
+    }
+
+    .logo-title {
+      font-size: 15px;
+    }
+
+    .arcade-title {
+      font-size: clamp(24px, 3vw, 44px);
+    }
+
+    .title-panel p,
+    .directive-sub {
+      font-size: 11px;
+    }
+
+    .round-badge {
+      font-size: 12px;
+    }
+
+    .turn-panel strong {
+      font-size: 14px;
+    }
+
+    .directive-strip {
+      min-height: 50px;
+      padding: 6px 12px;
+    }
+
+    .directive-title {
+      font-size: clamp(26px, 4vw, 50px);
+    }
+
+    .removal-badge {
+      min-width: 96px;
+      padding: 6px;
+    }
+
+    .removal-badge strong {
+      font-size: 34px;
+    }
+
+    .simulation-grid,
+    .extra-grid {
+      grid-template-columns: minmax(140px, 0.54fr) minmax(580px, 3.15fr) minmax(160px, 0.64fr);
+      gap: 5px;
+    }
+
+    .hud-card {
+      padding: 7px 9px;
+    }
+
+    .die-face {
+      width: 64px;
+      height: 64px;
+      font-size: 36px;
+    }
+
+    .mode-compare .patient-panel.active-patient,
+    .mode-extra .patient-panel.active-patient {
+      grid-template-rows: auto minmax(300px, 1fr) auto auto;
+    }
+
+    .mode-compare .patient-panel.active-patient .anatomy-board,
+    .mode-extra .patient-panel.active-patient .anatomy-board,
+    .mode-compare .patient-panel.active-patient .board-svg,
+    .mode-extra .patient-panel.active-patient .board-svg {
+      min-height: clamp(300px, 36vh, 400px);
+    }
+
+    .mode-compare .patient-panel:not(.active-patient) .anatomy-board,
+    .mode-compare .patient-panel:not(.active-patient) .board-svg {
+      min-height: 160px;
+    }
+
+    .chart-card .chart {
+      height: 104px;
+    }
+
+    .action-bar {
+      padding: 6px;
+    }
+
+    .phase-b_roll .action-bar > .btn-roll:not(.hidden),
+    .phase-extra_roll .action-bar > .btn-roll:not(.hidden) {
+      min-height: 54px;
+      font-size: 16px;
+    }
+
+    .footer-tile {
+      min-height: 44px;
+      padding: 6px 9px;
     }
   }
 

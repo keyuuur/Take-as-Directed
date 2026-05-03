@@ -362,7 +362,7 @@
 
     byId('compareAHeaderBadge').textContent = 'Dose: taken';
     byId('compareAHeaderBadge').className = 'small-status dose-good';
-    byId('compareBRollBadge').textContent = `Last roll: ${state.currentRoll || '-'}`;
+    updateRollReadout('compareRollCard', 'compareRollDie', 'compareBRollBadge', state.currentRoll, state.phase, 'Waiting for Patient B');
     byId('compareBHeaderBadge').className = 'small-status ' + getDoseBadgeClass(state.currentRoll, state.phase, true);
     byId('compareBHeaderBadge').textContent = getDoseBadgeText(state.currentRoll, state.phase, true);
 
@@ -398,7 +398,7 @@
     byId('extraRoundPill').textContent = `Round ${visibleRound} of ${appState.config.extraRounds}`;
     byId('extraRoundStatus').textContent = `${visibleRound} of ${appState.config.extraRounds}`;
     byId('extraMissedStatus').textContent = `${state.missedDoses} so far`;
-    byId('extraRollBadge').textContent = `Last roll: ${state.currentRoll || '-'}`;
+    updateRollReadout('extraRollCard', 'extraRollDie', 'extraRollBadge', state.currentRoll, state.phase, 'Tap Roll when ready');
     byId('extraHeaderBadge').className = 'small-status ' + getDoseBadgeClass(state.currentRoll, state.phase, false);
     byId('extraHeaderBadge').textContent = getDoseBadgeText(state.currentRoll, state.phase, false);
     byId('extraStatsBox').innerHTML = buildCountsBoxHtml(counts);
@@ -588,6 +588,29 @@
     if (state.phase === 'round_summary') return 'Round complete.';
     if (state.phase === 'finished') return 'Reflection ready.';
     return mode === 'compare' ? 'Compare both patients.' : 'Roll, treat, reflect.';
+  }
+
+  function updateRollReadout(cardId, dieId, badgeId, roll, phase, waitingText) {
+    const card = byId(cardId);
+    const die = byId(dieId);
+    const badge = byId(badgeId);
+    const isRollPhase = phase === 'b_roll' || phase === 'extra_roll';
+    const hasRoll = !!roll;
+    const missed = hasRoll && isMissedDose(roll);
+
+    card.classList.toggle('is-roll-phase', isRollPhase);
+    card.classList.toggle('roll-taken', hasRoll && !missed);
+    card.classList.toggle('roll-missed', missed);
+    die.textContent = hasRoll ? String(roll) : '?';
+    die.className = 'die-face ' + (hasRoll ? (missed ? 'die-missed' : 'die-taken') : (isRollPhase ? 'die-ready' : 'die-empty'));
+
+    if (hasRoll) {
+      badge.textContent = `Rolled ${roll} - ${missed ? 'dose missed' : 'dose taken'}`;
+    } else if (isRollPhase) {
+      badge.textContent = 'Tap Roll';
+    } else {
+      badge.textContent = waitingText;
+    }
   }
 
   function getPatientStatusText(total) {
