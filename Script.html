@@ -15,6 +15,12 @@
     overlayBusy: false
   };
 
+  const COLOR_ORDER = ['red', 'blue', 'yellow'];
+  const GOOD_DOSE_ROLLS = [2, 3, 4, 5];
+  const MISSED_DOSE_ROLLS = [1, 6];
+  const REMOVALS_PER_DOSE = 5;
+  const PATIENT_A_AUTO_ROLL = 4;
+
   const LEFT_LUNG_SLOTS = [
     [176, 148], [153, 170], [195, 171], [140, 196], [176, 196], [209, 196], [154, 223], [191, 224],
     [133, 248], [168, 249], [203, 250], [147, 276], [181, 277], [214, 278], [160, 303], [195, 304],
@@ -39,37 +45,37 @@
   }
 
   function bindEvents() {
-    byId('startBtn').addEventListener('click', startSession);
-    byId('openCompareBtn').addEventListener('click', () => {
+    onClick('startBtn', startSession);
+    onClick('openCompareBtn', () => {
       if (!appState.compare) appState.compare = createCompareState();
       showScreen('screen-compare');
       renderCompareView();
     });
-    byId('openExtraBtn').addEventListener('click', () => {
+    onClick('openExtraBtn', () => {
       if (!appState.extra) appState.extra = createExtraState();
       showScreen('screen-extra');
       renderExtraView();
     });
 
-    byId('compareMainBtn').addEventListener('click', handleCompareMainButton);
-    byId('compareRollBtn').addEventListener('click', rollComparePatientB);
+    onClick('compareMainBtn', handleCompareMainButton);
+    onClick('compareRollBtn', rollComparePatientB);
     document.querySelectorAll('#compareRemoveControls .remove-btn').forEach(btn => {
       btn.addEventListener('click', () => removeFromActive('compare', btn.dataset.color));
     });
 
-    byId('extraMainBtn').addEventListener('click', handleExtraMainButton);
-    byId('extraRollBtn').addEventListener('click', rollExtraPatient);
+    onClick('extraMainBtn', handleExtraMainButton);
+    onClick('extraRollBtn', rollExtraPatient);
     document.querySelectorAll('#extraRemoveControls .remove-btn').forEach(btn => {
       btn.addEventListener('click', () => removeFromActive('extra', btn.dataset.color));
     });
 
-    byId('compareSubmitBtn').addEventListener('click', submitCompareMode);
-    byId('extraSubmitBtn').addEventListener('click', submitExtraMode);
-    byId('compareEmergencyBtn').addEventListener('click', () => emergencySubmit('compare'));
-    byId('extraEmergencyBtn').addEventListener('click', () => emergencySubmit('extra'));
-    byId('backToModesBtn1').addEventListener('click', () => showScreen('screen-mode'));
-    byId('backToModesBtn2').addEventListener('click', () => showScreen('screen-mode'));
-    byId('finishBackBtn').addEventListener('click', () => showScreen('screen-mode'));
+    onClick('compareSubmitBtn', submitCompareMode);
+    onClick('extraSubmitBtn', submitExtraMode);
+    onClick('compareEmergencyBtn', () => emergencySubmit('compare'));
+    onClick('extraEmergencyBtn', () => emergencySubmit('extra'));
+    onClick('backToModesBtn1', () => showScreen('screen-mode'));
+    onClick('backToModesBtn2', () => showScreen('screen-mode'));
+    onClick('finishBackBtn', () => showScreen('screen-mode'));
 
     byId('overlayContinueBtn').onclick = continueOverlayAction;
     byId('overlay').addEventListener('click', (e) => {
@@ -103,10 +109,7 @@
         appState.period = result.period;
         appState.compare = null;
         appState.extra = null;
-        byId('studentBadge').textContent = `${result.studentName} • Period ${result.period}`;
-        byId('studentBadge').classList.remove('hidden');
-        byId('compareStudentPill').textContent = `Student: ${result.studentName}`;
-        byId('extraStudentPill').textContent = `Student: ${result.studentName}`;
+        syncSessionUi(result);
         showScreen('screen-mode');
       })
       .withFailureHandler(handleServerError)
@@ -117,6 +120,13 @@
     const errorEl = byId('loginError');
     errorEl.textContent = msg;
     errorEl.classList.remove('hidden');
+  }
+
+  function syncSessionUi(result) {
+    setText('studentBadge', `${result.studentName} - Period ${result.period}`);
+    setHidden('studentBadge', false);
+    setText('compareStudentPill', `Student: ${result.studentName}`);
+    setText('extraStudentPill', `Student: ${result.studentName}`);
   }
 
   function createCompareState() {
@@ -187,11 +197,11 @@
     state.patientA.flashAdded = [];
     state.patientB.flashAdded = [];
     const workingCounts = cloneCounts(state.patientA.counts);
-    const removesLeft = Math.min(5, countTotal(workingCounts));
-    state.working = { mode: 'compare', patientKey: 'patientA', roll: 4, workingCounts, removesLeft };
+    const removesLeft = Math.min(REMOVALS_PER_DOSE, countTotal(workingCounts));
+    state.working = { mode: 'compare', patientKey: 'patientA', roll: PATIENT_A_AUTO_ROLL, workingCounts, removesLeft };
     state.phase = removesLeft > 0 ? 'a_remove' : 'b_roll';
     if (removesLeft === 0) {
-      commitPatientRound(state.patientA, state.activeRound, 4, workingCounts, 'compare');
+      commitPatientRound(state.patientA, state.activeRound, PATIENT_A_AUTO_ROLL, workingCounts, 'compare');
       state.working = null;
     }
     renderCompareView();
@@ -219,25 +229,14 @@
       state.phase = 'b_missed';
       renderCompareView();
       openOverlay('REMAINING BACTERIA REPRODUCE!', 'Patient B missed the dose, so no bacteria were killed. One of each remaining type will reproduce.', () => {
-        const counts = cloneCounts(state.patientB.counts);
-        const added = reproduceCounts(counts);
-        state.patientB.flashAdded = added;
-        commitPatientRound(state.patientB, state.activeRound, roll, counts, 'compare');
+        reproduceAndCommitRound(state, state.patientB, roll, state.patientB.counts, 'compare');
         finishCompareRound();
       });
       return;
     }
-    const workingCounts = cloneCounts(state.patientB.counts);
-    const removesLeft = Math.min(5, countTotal(workingCounts));
-    state.working = { mode: 'compare', patientKey: 'patientB', roll, workingCounts, removesLeft };
-    state.phase = removesLeft > 0 ? 'b_remove' : 'round_summary';
-    if (removesLeft === 0) {
-      commitPatientRound(state.patientB, state.activeRound, roll, workingCounts, 'compare');
-      state.working = null;
-      finishCompareRound();
-      return;
+    if (!startTreatmentPhase(state, state.patientB, 'patientB', roll, 'compare', 'b_remove', finishCompareRound)) {
+      renderCompareView();
     }
-    renderCompareView();
   }
 
   function rollExtraPatient() {
@@ -250,25 +249,27 @@
       state.phase = 'extra_missed';
       renderExtraView();
       openOverlay('REMAINING BACTERIA REPRODUCE!', 'The dose was missed this round, so one of each remaining type will reproduce.', () => {
-        const counts = cloneCounts(state.patient.counts);
-        const added = reproduceCounts(counts);
-        state.patient.flashAdded = added;
-        commitPatientRound(state.patient, state.activeRound, roll, counts, 'extra');
+        reproduceAndCommitRound(state, state.patient, roll, state.patient.counts, 'extra');
         finishExtraRound();
       });
       return;
     }
-    const workingCounts = cloneCounts(state.patient.counts);
-    const removesLeft = Math.min(5, countTotal(workingCounts));
-    state.working = { mode: 'extra', patientKey: 'patient', roll, workingCounts, removesLeft };
-    state.phase = removesLeft > 0 ? 'extra_remove' : 'round_summary';
-    if (removesLeft === 0) {
-      commitPatientRound(state.patient, state.activeRound, roll, workingCounts, 'extra');
-      state.working = null;
-      finishExtraRound();
-      return;
+    if (!startTreatmentPhase(state, state.patient, 'patient', roll, 'extra', 'extra_remove', finishExtraRound)) {
+      renderExtraView();
     }
-    renderExtraView();
+  }
+
+  function startTreatmentPhase(state, patient, patientKey, roll, mode, removePhase, finishRound) {
+    const workingCounts = cloneCounts(patient.counts);
+    const removesLeft = Math.min(REMOVALS_PER_DOSE, countTotal(workingCounts));
+    state.working = { mode, patientKey, roll, workingCounts, removesLeft };
+    state.phase = removesLeft > 0 ? removePhase : 'round_summary';
+    if (removesLeft > 0) return false;
+
+    commitPatientRound(patient, state.activeRound, roll, workingCounts, mode);
+    state.working = null;
+    finishRound();
+    return true;
   }
 
   function removeFromActive(mode, color) {
@@ -283,41 +284,41 @@
 
     if (state.working.removesLeft <= 0) {
       if (mode === 'compare' && state.working.patientKey === 'patientA') {
-        renderCompareView();
-        openOverlay('REMAINING BACTERIA REPRODUCE!', 'Patient A finished treatment for this round. One of each remaining type will reproduce.', () => {
-          const nextCounts = cloneCounts(state.working.workingCounts);
-          const added = reproduceCounts(nextCounts);
-          state.patientA.flashAdded = added;
-          commitPatientRound(state.patientA, state.activeRound, 4, nextCounts, 'compare');
-          state.working = null;
-          state.phase = 'b_roll';
-          renderCompareView();
+        finishTreatmentWithReproduction({
+          state,
+          patient: state.patientA,
+          roll: PATIENT_A_AUTO_ROLL,
+          mode: 'compare',
+          render: renderCompareView,
+          text: 'Patient A finished treatment for this round. One of each remaining type will reproduce.',
+          afterCommit: () => {
+            state.phase = 'b_roll';
+            renderCompareView();
+          }
         });
         return;
       }
       if (mode === 'compare' && state.working.patientKey === 'patientB') {
-        const usedRoll = state.working.roll;
-        renderCompareView();
-        openOverlay('REMAINING BACTERIA REPRODUCE!', 'Patient B finished treatment for this round. One of each remaining type will reproduce.', () => {
-          const nextCounts = cloneCounts(state.working.workingCounts);
-          const added = reproduceCounts(nextCounts);
-          state.patientB.flashAdded = added;
-          commitPatientRound(state.patientB, state.activeRound, usedRoll, nextCounts, 'compare');
-          state.working = null;
-          finishCompareRound();
+        finishTreatmentWithReproduction({
+          state,
+          patient: state.patientB,
+          roll: state.working.roll,
+          mode: 'compare',
+          render: renderCompareView,
+          text: 'Patient B finished treatment for this round. One of each remaining type will reproduce.',
+          afterCommit: finishCompareRound
         });
         return;
       }
       if (mode === 'extra') {
-        const usedRoll = state.working.roll;
-        renderExtraView();
-        openOverlay('REMAINING BACTERIA REPRODUCE!', 'The patient finished treatment for this round. One of each remaining type will reproduce.', () => {
-          const nextCounts = cloneCounts(state.working.workingCounts);
-          const added = reproduceCounts(nextCounts);
-          state.patient.flashAdded = added;
-          commitPatientRound(state.patient, state.activeRound, usedRoll, nextCounts, 'extra');
-          state.working = null;
-          finishExtraRound();
+        finishTreatmentWithReproduction({
+          state,
+          patient: state.patient,
+          roll: state.working.roll,
+          mode: 'extra',
+          render: renderExtraView,
+          text: 'The patient finished treatment for this round. One of each remaining type will reproduce.',
+          afterCommit: finishExtraRound
         });
         return;
       }
@@ -325,6 +326,16 @@
 
     if (mode === 'compare') renderCompareView();
     else renderExtraView();
+  }
+
+  function finishTreatmentWithReproduction({ state, patient, roll, mode, render, text, afterCommit }) {
+    const sourceCounts = cloneCounts(state.working.workingCounts);
+    render();
+    openOverlay('REMAINING BACTERIA REPRODUCE!', text, () => {
+      reproduceAndCommitRound(state, patient, roll, sourceCounts, mode);
+      state.working = null;
+      afterCommit();
+    });
   }
 
   function finishCompareRound() {
@@ -420,10 +431,8 @@
   function renderCompareSidebar() {
     const state = appState.compare;
     const working = state.working;
-    byId('compareMainBtn').classList.add('hidden');
-    byId('compareRollBtn').classList.add('hidden');
-    byId('compareRemoveControls').classList.add('hidden');
-    byId('compareRemoveInfo').textContent = '';
+    resetActionControls('compare');
+    setText('compareRemoveInfo', '');
 
     let title = 'Your action';
     let text = '';
@@ -431,22 +440,22 @@
     if (state.phase === 'idle') {
       title = 'Your action';
       text = 'Click Start compare mode. You will treat Patient A first, then Patient B.';
-      byId('compareMainBtn').textContent = 'Start compare mode';
-      byId('compareMainBtn').classList.remove('hidden');
+      setText('compareMainBtn', 'Start compare mode');
+      setHidden('compareMainBtn', false);
     } else if (state.phase === 'a_remove') {
       title = 'Your action: Patient A';
-      text = 'Remove 5 bacteria from Patient A. Start with red, then blue, then yellow.';
-      byId('compareRemoveControls').classList.remove('hidden');
-      byId('compareRemoveInfo').textContent = `${working.removesLeft} bacteria left to remove this round.`;
+      text = `Remove ${REMOVALS_PER_DOSE} bacteria from Patient A. Start with red, then blue, then yellow.`;
+      setHidden('compareRemoveControls', false);
+      setText('compareRemoveInfo', `${working.removesLeft} bacteria left to remove this round.`);
     } else if (state.phase === 'b_roll') {
       title = 'Your action: Patient B';
       text = 'Patient A is finished. Now roll for Patient B.';
-      byId('compareRollBtn').classList.remove('hidden');
+      setHidden('compareRollBtn', false);
     } else if (state.phase === 'b_remove') {
       title = 'Your action: Patient B';
-      text = `Patient B rolled ${state.currentRoll}. Remove 5 bacteria in the correct order.`;
-      byId('compareRemoveControls').classList.remove('hidden');
-      byId('compareRemoveInfo').textContent = `${working.removesLeft} bacteria left to remove this round.`;
+      text = `Patient B rolled ${state.currentRoll}. Remove ${REMOVALS_PER_DOSE} bacteria in the correct order.`;
+      setHidden('compareRemoveControls', false);
+      setText('compareRemoveInfo', `${working.removesLeft} bacteria left to remove this round.`);
     } else if (state.phase === 'b_missed') {
       title = 'Your action: Patient B';
       text = `Patient B rolled ${state.currentRoll}. The dose was missed, so the remaining bacteria will reproduce.`;
@@ -454,8 +463,8 @@
       title = 'Round complete';
       text = state.roundSummary;
       if (state.roundsCompleted < appState.config.compareRounds) {
-        byId('compareMainBtn').textContent = `Start Round ${state.roundsCompleted + 1}`;
-        byId('compareMainBtn').classList.remove('hidden');
+        setText('compareMainBtn', `Start Round ${state.roundsCompleted + 1}`);
+        setHidden('compareMainBtn', false);
       }
     } else if (state.phase === 'finished') {
       title = 'Reflection';
@@ -464,41 +473,39 @@
         : 'Building your reflection questions from your data...';
     }
 
-    byId('compareActionTitle').textContent = title;
-    byId('compareInstruction').textContent = text;
-    byId('compareActionText').textContent = text;
+    setText('compareActionTitle', title);
+    setText('compareInstruction', text);
+    setText('compareActionText', text);
     updateRemoveButtons('compare');
   }
 
   function renderExtraSidebar() {
     const state = appState.extra;
     const working = state.working;
-    byId('extraMainBtn').classList.add('hidden');
-    byId('extraRollBtn').classList.add('hidden');
-    byId('extraRemoveControls').classList.add('hidden');
-    byId('extraRemoveInfo').textContent = '';
+    resetActionControls('extra');
+    setText('extraRemoveInfo', '');
 
     let title = 'Your action';
     let text = '';
 
     if (state.phase === 'idle') {
       text = 'Click Start extra-credit mode to begin.';
-      byId('extraMainBtn').textContent = 'Start extra-credit mode';
-      byId('extraMainBtn').classList.remove('hidden');
+      setText('extraMainBtn', 'Start extra-credit mode');
+      setHidden('extraMainBtn', false);
     } else if (state.phase === 'extra_roll') {
       text = 'Roll the die to see whether the patient took the dose or missed it.';
-      byId('extraRollBtn').classList.remove('hidden');
+      setHidden('extraRollBtn', false);
     } else if (state.phase === 'extra_remove') {
-      text = `You rolled ${state.currentRoll}. Remove 5 bacteria in the correct order.`;
-      byId('extraRemoveControls').classList.remove('hidden');
-      byId('extraRemoveInfo').textContent = `${working.removesLeft} bacteria left to remove this round.`;
+      text = `You rolled ${state.currentRoll}. Remove ${REMOVALS_PER_DOSE} bacteria in the correct order.`;
+      setHidden('extraRemoveControls', false);
+      setText('extraRemoveInfo', `${working.removesLeft} bacteria left to remove this round.`);
     } else if (state.phase === 'extra_missed') {
       text = `You rolled ${state.currentRoll}. The dose was missed, so the remaining bacteria will reproduce.`;
     } else if (state.phase === 'round_summary') {
       text = state.roundSummary;
       if (state.roundsCompleted < appState.config.extraRounds) {
-        byId('extraMainBtn').textContent = `Start Round ${state.roundsCompleted + 1}`;
-        byId('extraMainBtn').classList.remove('hidden');
+        setText('extraMainBtn', `Start Round ${state.roundsCompleted + 1}`);
+        setHidden('extraMainBtn', false);
       }
     } else if (state.phase === 'finished') {
       text = state.summary
@@ -506,9 +513,9 @@
         : 'Building your reflection questions from your data...';
     }
 
-    byId('extraActionTitle').textContent = title;
-    byId('extraInstruction').textContent = text;
-    byId('extraActionText').textContent = text;
+    setText('extraActionTitle', title);
+    setText('extraInstruction', text);
+    setText('extraActionText', text);
     updateRemoveButtons('extra');
   }
 
@@ -567,8 +574,8 @@
       const left = state.working ? state.working.removesLeft : 0;
       return { title: `Remove ${left} Bacteria`, sub: 'Red bacteria must be removed first.' };
     }
-    if (state.phase === 'b_roll') return { title: 'Roll for Patient B', sub: 'A roll of 1 or 6 means the dose was missed.' };
-    if (state.phase === 'extra_roll') return { title: 'Roll the Dose', sub: 'A roll of 1 or 6 means the dose was missed.' };
+    if (state.phase === 'b_roll') return { title: 'Roll for Patient B', sub: `A roll of ${MISSED_DOSE_ROLLS.join(' or ')} means the dose was missed.` };
+    if (state.phase === 'extra_roll') return { title: 'Roll the Dose', sub: `A roll of ${MISSED_DOSE_ROLLS.join(' or ')} means the dose was missed.` };
     if (state.phase === 'b_missed' || state.phase === 'extra_missed') {
       return { title: 'Missed Dose', sub: `${rollText}No bacteria are removed. Survivors reproduce.` };
     }
@@ -1121,6 +1128,12 @@
     patient.displayHistory.push(cloneCounts(patient.counts));
   }
 
+  function reproduceAndCommitRound(state, patient, roll, sourceCounts, mode) {
+    const counts = cloneCounts(sourceCounts);
+    patient.flashAdded = reproduceCounts(counts);
+    commitPatientRound(patient, state.activeRound, roll, counts, mode);
+  }
+
   function makeHistoryStep(mode, patientType, round, roll, adherence, counts) {
     return {
       mode,
@@ -1137,7 +1150,7 @@
 
   function reproduceCounts(counts) {
     const added = [];
-    ['red', 'blue', 'yellow'].forEach(color => {
+    COLOR_ORDER.forEach(color => {
       if (counts[color] > 0) {
         counts[color] += 1;
         added.push(color);
@@ -1158,7 +1171,7 @@
   }
 
   function isMissedDose(roll) {
-    return roll === 1 || roll === 6;
+    return MISSED_DOSE_ROLLS.includes(roll);
   }
 
   function generatePoorAdherenceRolls(rounds) {
@@ -1173,8 +1186,8 @@
       if (allLate) arr[0] = 1 + Math.floor(Math.random() * 2);
     }
     const missed = new Set(arr);
-    const good = [2, 3, 4, 5];
-    const bad = [1, 6];
+    const good = GOOD_DOSE_ROLLS;
+    const bad = MISSED_DOSE_ROLLS;
     return Array.from({ length: rounds }, (_, idx) => missed.has(idx + 1)
       ? bad[Math.floor(Math.random() * bad.length)]
       : good[Math.floor(Math.random() * good.length)]);
@@ -1278,6 +1291,29 @@
 
   function escapeAttr(str) {
     return escapeHtml(str).replace(/`/g, '&#96;');
+  }
+
+  function onClick(id, handler) {
+    byId(id).addEventListener('click', handler);
+  }
+
+  function setText(id, value) {
+    byId(id).textContent = value;
+  }
+
+  function setHtml(id, value) {
+    byId(id).innerHTML = value;
+  }
+
+  function setHidden(id, hidden) {
+    byId(id).classList.toggle('hidden', hidden);
+  }
+
+  function resetActionControls(mode) {
+    const ids = mode === 'compare'
+      ? ['compareMainBtn', 'compareRollBtn', 'compareRemoveControls']
+      : ['extraMainBtn', 'extraRollBtn', 'extraRemoveControls'];
+    ids.forEach(id => setHidden(id, true));
   }
 
   function byId(id) { return document.getElementById(id); }
