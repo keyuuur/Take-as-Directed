@@ -77,7 +77,19 @@ assert(extra.summary.missedDoses === 1, 'Server should recompute extra missed do
 assert(extraAnalytics.status === 'partial', 'Emergency analytics should mark partial');
 assert(extraAnalytics.predictionChoice === '', 'Extra analytics should leave prediction blank');
 
-console.log(JSON.stringify({ server: 'passed', analytics: 'passed', validation: 'passed' }, null, 2));
+const dashboardCells = teacherDashboardCells_();
+const dashboardByCell = dashboardCells.reduce((map, cell) => {
+  map[cell.a1] = cell.value;
+  return map;
+}, {});
+assert(dashboardByCell.A1 === 'Take as Directed Teacher Dashboard', 'Teacher dashboard should have a title');
+assert(dashboardByCell.B5 === '=COUNTA(Analytics!A2:A)', 'Teacher dashboard should count submissions from Analytics');
+assert(dashboardByCell.B8 === '=COUNTIF(Analytics!F2:F,"partial")', 'Teacher dashboard should count emergency submissions');
+assert(dashboardByCell.B11.includes('Analytics!P2:P'), 'Teacher dashboard should summarize Patient B minus Patient A');
+assert(dashboardByCell.E5 === '=COUNTIF(Analytics!L2:L,D5)', 'Teacher dashboard should summarize predictions');
+assert(dashboardByCell.A16 === '2' && dashboardByCell.B16.includes('Analytics!D2:D'), 'Teacher dashboard should include period rows');
+
+console.log(JSON.stringify({ server: 'passed', analytics: 'passed', validation: 'passed', dashboard: 'passed' }, null, 2));
 `;
 
 const context = { console };

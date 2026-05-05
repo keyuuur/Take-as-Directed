@@ -1,0 +1,70 @@
+function renderCompareView() {
+    const state = appState.compare;
+    if (!state) return;
+
+    const countsA = getDisplayedCounts('compare', 'patientA');
+    const countsB = getDisplayedCounts('compare', 'patientB');
+    const visibleRound = getCompareVisibleRound(state);
+    const badgeA = getCompareABadge(state);
+    const badgeB = getCompareBBadge(state);
+    byId('compareHeaderTitle').textContent = 'ANTIBIOTIC RUN';
+    byId('compareRoundPill').textContent = getCompareRoundPillText(state);
+    byId('compareRoundStatus').textContent = `A ${state.patientARoundsCompleted} / ${appState.config.compareRounds} | B ${state.patientBRoundsCompleted} / ${appState.config.compareRounds}`;
+    byId('compareMissedStatus').textContent = `${state.patientB.missedDoses} so far`;
+
+    byId('compareAHeaderBadge').textContent = badgeA.text;
+    byId('compareAHeaderBadge').className = 'small-status ' + badgeA.cls;
+    updateRollReadout('compareRollCard', 'compareRollDie', 'compareBRollBadge', state.currentRoll, state.phase, getCompareRollWaitingText(state));
+    byId('compareBHeaderBadge').className = 'small-status ' + badgeB.cls;
+    byId('compareBHeaderBadge').textContent = badgeB.text;
+
+    byId('compareAStatsBox').innerHTML = buildCountsBoxHtml(countsA);
+    byId('compareBStatsBox').innerHTML = buildCountsBoxHtml(countsB);
+    byId('compareABoard').innerHTML = buildBoardSvg('compareA', countsA, state.patientA.flashAdded);
+    byId('compareBBoard').innerHTML = buildBoardSvg('compareB', countsB, state.patientB.flashAdded);
+
+    byId('compareAStep').textContent = getCompareStepText('patientA', state, countsA);
+    byId('compareBStep').textContent = getCompareStepText('patientB', state, countsB);
+
+    drawChart('compareAChart', state.patientA.displayHistory, 'Patient A');
+    drawChart('compareBChart', state.patientB.displayHistory, 'Patient B');
+
+    renderCompareSidebar();
+    updateCompareArcadeHud(state, countsA, countsB, visibleRound);
+
+    const showReflection = !!state.summary && state.phase === 'finished';
+    byId('screen-compare').classList.toggle('results-mode', showReflection);
+    byId('compareReflectionWrap').classList.toggle('hidden', !showReflection);
+    if (showReflection) {
+      byId('compareSummary').innerHTML = buildCompareSummaryHtml(state.summary);
+      renderQuestions('compareReflectionQuestions', state.reflection, 'compare');
+    }
+  }
+
+  function renderExtraView() {
+    const state = appState.extra;
+    if (!state) return;
+    const counts = getDisplayedCounts('extra', 'patient');
+    const visibleRound = Math.max(state.roundsCompleted, state.activeRound || 0);
+    byId('extraHeaderTitle').textContent = 'ANTIBIOTIC RUN';
+    byId('extraRoundPill').textContent = `Round ${visibleRound} of ${appState.config.extraRounds}`;
+    byId('extraRoundStatus').textContent = `${visibleRound} of ${appState.config.extraRounds}`;
+    byId('extraMissedStatus').textContent = `${state.missedDoses} so far`;
+    updateRollReadout('extraRollCard', 'extraRollDie', 'extraRollBadge', state.currentRoll, state.phase, 'Tap Roll when ready');
+    byId('extraHeaderBadge').className = 'small-status ' + getDoseBadgeClass(state.currentRoll, state.phase, false);
+    byId('extraHeaderBadge').textContent = getDoseBadgeText(state.currentRoll, state.phase, false);
+    byId('extraStatsBox').innerHTML = buildCountsBoxHtml(counts);
+    byId('extraBoard').innerHTML = buildBoardSvg('extra', counts, state.patient.flashAdded);
+    byId('extraStep').textContent = getExtraStepText(state, counts);
+    drawChart('extraChart', state.patient.displayHistory, 'Your patient');
+    renderExtraSidebar();
+    updateExtraArcadeHud(state, counts, visibleRound);
+
+    const showReflection = !!state.summary && state.phase === 'finished';
+    byId('screen-extra').classList.toggle('results-mode', showReflection);
+    byId('extraReflectionWrap').classList.toggle('hidden', !showReflection);
+    if (showReflection) {
+      byId('extraSummary').innerHTML = buildExtraSummaryHtml(state.summary);
+      renderQuestions('extraReflectionQuestions', state.reflection, 'extra');
+    }
+  }

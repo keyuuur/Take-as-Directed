@@ -9,6 +9,7 @@ Google Apps Script classroom game for modeling antibiotic adherence and bacteria
 - `Code.js` is the Apps Script server file. It creates sessions, builds reflection questions, saves submissions, and sets up the connected Sheet tabs.
 - `Index.html` contains the screen markup and stable element IDs used by the client script.
 - `Script.html` is now a small client-script loader. The `Client_*.html` partials split state, startup, gameplay flow, rendering, submissions, and utilities.
+- Rendering is split into three smaller partials: `Client_Render_Core.html` for top-level screen updates, `Client_Render_Hud.html` for side panels/action controls, and `Client_Render_Board.html` for lung boards, bacteria tokens, counts, and charts.
 - `Styles.html` owns the student-facing arcade UI and iPad layout rules.
 - `appsscript.json` stores the Apps Script runtime and web app settings.
 
@@ -25,6 +26,7 @@ Google Apps Script classroom game for modeling antibiotic adherence and bacteria
 - Rendering still happens through `renderCompareView()` and `renderExtraView()`, with smaller helpers updating action controls, roll readouts, cards, charts, and footer HUD.
 - If a patient's bacteria total reaches 0, the round auto-completes with a student-facing explanation instead of showing a reproduction overlay. The message explains that there is nothing left to remove or reproduce.
 - Submission payloads are built through shared helpers in `Client_Submissions.html` so normal submit and emergency submit use the same summary logic.
+- Emergency Submit opens a type-confirm modal first. Students must type `SUBMIT` before partial work can be saved.
 
 ### Rules To Preserve
 
@@ -44,6 +46,8 @@ Google Apps Script classroom game for modeling antibiotic adherence and bacteria
 - The first time the analytics upgrade runs, Apps Script creates one-time backup tabs for `Sessions`, `RoundData`, and `Responses`.
 - The backup marker is stored in the document property `takeAsDirected.analyticsBackupCreatedAt`, so those backup tabs are not recreated every time the app opens.
 - A new `Analytics` tab stores one summary row per Compare, Extra, or Emergency submission.
+- A new `TeacherDashboard` tab reads from `Analytics` with summary formulas for submissions, emergency submissions, average scores, missed doses, prediction distribution, and period-level patterns.
+- The dashboard setup only fills blank expected cells. If a teacher has already typed notes or made changes in existing dashboard cells, the app does not overwrite those edits.
 - Compare analytics include the Patient B prediction, confidence level, final Patient A total, final Patient B total, the Patient B minus Patient A difference, Patient B yellow share, missed doses, score, and a short adherence outcome note.
 - Extra analytics leave prediction fields blank and store the extra-mode final total, missed doses, score, and adherence outcome note.
 
@@ -51,6 +55,7 @@ Google Apps Script classroom game for modeling antibiotic adherence and bacteria
 
 - The UI is optimized for 9th grade students on iPad landscape.
 - The short-height media query in `Styles.html` is the main no-scroll classroom layout pass.
+- A second iPad-landscape width query targets roughly 1024-1180px classroom screens so buttons, boards, charts, and footer cards stay readable without crowding.
 - In that compact mode, the science tip is hidden during gameplay, the board and charts are shortened, and the action controls stay visible.
 - Critical controls should never be hidden: start/roll/remove buttons, emergency submit, counts, and round progress.
 
@@ -69,4 +74,6 @@ Before pushing to Apps Script:
 - Test that the final Compare debrief includes final totals, missed-dose count, the student prediction, the real-world adherence explanation, and the medical-professional disclaimer.
 - Test Extra mode taken-dose and missed-dose branches.
 - Confirm the new `Analytics` tab appears and backup tabs are created only once.
+- Confirm the new `TeacherDashboard` tab appears and formulas pull from `Analytics`.
+- Test Emergency Submit in both modes: Cancel should do nothing, and Submit Partial Work should unlock only after typing `SUBMIT`.
 - Confirm there is no horizontal overflow at iPad landscape size.

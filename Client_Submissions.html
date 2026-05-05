@@ -287,6 +287,42 @@ function buildCompareReflection() {
       .saveExtraSubmission(payload);
   }
 
+  function openEmergencyConfirm(mode) {
+    if (!appState[mode]) return;
+    appState.pendingEmergencyMode = mode;
+    const label = mode === 'compare' ? 'Compare Mode' : 'Extra Mode';
+    byId('emergencyConfirmTitle').textContent = `Emergency Submit: ${label}`;
+    byId('emergencyConfirmText').textContent = 'Emergency Submit saves partial work. Unfinished reflection questions score 0.';
+    byId('emergencyConfirmInput').value = '';
+    byId('emergencyConfirm').classList.remove('hidden');
+    updateEmergencyConfirmState();
+    setTimeout(() => byId('emergencyConfirmInput').focus(), 0);
+  }
+
+  function closeEmergencyConfirm() {
+    appState.pendingEmergencyMode = null;
+    byId('emergencyConfirmInput').value = '';
+    byId('emergencyConfirm').classList.add('hidden');
+    updateEmergencyConfirmState();
+  }
+
+  function updateEmergencyConfirmState() {
+    const isReady = byId('emergencyConfirmInput').value === 'SUBMIT';
+    const feedback = byId('emergencyConfirmFeedback');
+    byId('emergencySubmitBtn').disabled = !isReady;
+    feedback.textContent = isReady
+      ? 'Ready. This will save partial work and mark unanswered reflection questions as 0.'
+      : 'The submit button will unlock after the exact word is typed.';
+    feedback.classList.toggle('ready', isReady);
+  }
+
+  function confirmEmergencySubmit() {
+    const mode = appState.pendingEmergencyMode;
+    if (!mode || byId('emergencyConfirmInput').value !== 'SUBMIT') return;
+    closeEmergencyConfirm();
+    emergencySubmit(mode);
+  }
+
   function emergencySubmit(mode) {
     const state = appState[mode];
     if (!state) return;

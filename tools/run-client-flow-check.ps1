@@ -7,7 +7,9 @@ $clientFiles = @(
   'Client_State.html',
   'Client_Init.html',
   'Client_Flow.html',
-  'Client_Render.html',
+  'Client_Render_Core.html',
+  'Client_Render_Hud.html',
+  'Client_Render_Board.html',
   'Client_Submissions.html',
   'Client_Utils.html'
 )
@@ -216,14 +218,37 @@ function runEmergencySubmits() {
   appState.compare = createCompareState();
   appState.compare.prediction.choice = 'I am not sure yet.';
   appState.compare.prediction.confidence = 'Not sure';
-  emergencySubmit('compare');
+  google.script.run.savedEmergencyPayload = null;
+  openEmergencyConfirm('compare');
+  assert(appState.pendingEmergencyMode === 'compare', 'Compare emergency modal should remember pending mode');
+  assert(!document.getElementById('emergencyConfirm').classList.contains('hidden'), 'Compare emergency modal should open');
+  assert(google.script.run.savedEmergencyPayload === null, 'Opening emergency modal should not call the server');
+  assert(document.getElementById('emergencySubmitBtn').disabled === true, 'Emergency submit should stay locked before typing SUBMIT');
+  document.getElementById('emergencyConfirmInput').value = 'submit';
+  updateEmergencyConfirmState();
+  assert(document.getElementById('emergencySubmitBtn').disabled === true, 'Emergency submit should require exact uppercase SUBMIT');
+  closeEmergencyConfirm();
+  assert(appState.pendingEmergencyMode === null, 'Cancel should clear pending emergency mode');
+  assert(document.getElementById('emergencyConfirm').classList.contains('hidden'), 'Cancel should close emergency modal');
+  assert(google.script.run.savedEmergencyPayload === null, 'Cancel should not call emergency submit');
+  openEmergencyConfirm('compare');
+  document.getElementById('emergencyConfirmInput').value = 'SUBMIT';
+  updateEmergencyConfirmState();
+  assert(document.getElementById('emergencySubmitBtn').disabled === false, 'Typing SUBMIT should unlock emergency submit');
+  confirmEmergencySubmit();
   assert(google.script.run.savedEmergencyPayload.mode === 'compare', 'Compare emergency should include mode');
   assert(google.script.run.savedEmergencyPayload.history.length === 2, 'Compare emergency should include both starting history rows');
   assert(google.script.run.savedEmergencyPayload.summary.predictionChoice === 'I am not sure yet.', 'Compare emergency should preserve prediction');
   assert(google.script.run.savedEmergencyPayload.summary.completedRounds === 0, 'Compare emergency should record partial progress');
 
   appState.extra = createExtraState();
-  emergencySubmit('extra');
+  google.script.run.savedEmergencyPayload = null;
+  openEmergencyConfirm('extra');
+  assert(appState.pendingEmergencyMode === 'extra', 'Extra emergency modal should remember pending mode');
+  assert(google.script.run.savedEmergencyPayload === null, 'Opening extra emergency modal should not call the server');
+  document.getElementById('emergencyConfirmInput').value = 'SUBMIT';
+  updateEmergencyConfirmState();
+  confirmEmergencySubmit();
   assert(google.script.run.savedEmergencyPayload.mode === 'extra', 'Extra emergency should include mode');
   assert(google.script.run.savedEmergencyPayload.history.length === 1, 'Extra emergency should include starting history row');
   assert(google.script.run.savedEmergencyPayload.summary.finalTotal === 20, 'Extra emergency should record current total');

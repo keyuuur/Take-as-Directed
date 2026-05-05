@@ -189,6 +189,7 @@ const CONFIG = {
 };
 
 const ANALYTICS_BACKUP_PROPERTY = 'takeAsDirected.analyticsBackupCreatedAt';
+const TEACHER_DASHBOARD_SHEET_NAME = 'TeacherDashboard';
 const PREDICTION_CHOICE_OPTIONS = [
   'Patient B will end with more bacteria.',
   'Patient B will end with fewer bacteria.',
@@ -623,6 +624,7 @@ function initializeSheets_() {
   ]);
   ensureAnalyticsBackup_();
   ensureSheet_('Analytics', analyticsHeaders_());
+  ensureTeacherDashboard_();
 }
 
 function ensureSheet_(name, headers) {
@@ -706,6 +708,89 @@ function ensureAnalyticsBackup_() {
     props.setProperty(ANALYTICS_BACKUP_PROPERTY, new Date().toISOString());
   } finally {
     lock.releaseLock();
+  }
+}
+
+function ensureTeacherDashboard_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(TEACHER_DASHBOARD_SHEET_NAME);
+  const created = !sheet;
+  if (!sheet) {
+    sheet = ss.insertSheet(TEACHER_DASHBOARD_SHEET_NAME);
+  }
+
+  // This dashboard is intentionally additive: blank expected cells are filled,
+  // but teacher edits in existing cells are left alone.
+  teacherDashboardCells_().forEach(function(cell) {
+    writeDashboardCellIfBlank_(sheet, cell.a1, cell.value);
+  });
+
+  if (created) {
+    sheet.setFrozenRows(4);
+    sheet.getRange('A1:E1').merge();
+    sheet.getRange('A1:E1').setFontSize(16).setFontWeight('bold');
+    sheet.getRange('A2:E2').merge();
+    sheet.getRange('A4:B4').setFontWeight('bold').setBackground('#d9eaf7');
+    sheet.getRange('D4:E4').setFontWeight('bold').setBackground('#f7e3b0');
+    sheet.getRange('A15:E15').setFontWeight('bold').setBackground('#d9ead3');
+    sheet.setColumnWidths(1, 5, 170);
+  }
+}
+
+function teacherDashboardCells_() {
+  const cells = [
+    { a1: 'A1', value: 'Take as Directed Teacher Dashboard' },
+    { a1: 'A2', value: 'Auto-generated from Analytics. Existing classroom data and teacher edits are preserved.' },
+    { a1: 'A4', value: 'Metric' },
+    { a1: 'B4', value: 'Value' },
+    { a1: 'A5', value: 'Total submissions' },
+    { a1: 'B5', value: '=COUNTA(Analytics!A2:A)' },
+    { a1: 'A6', value: 'Compare submissions' },
+    { a1: 'B6', value: '=COUNTIF(Analytics!E2:E,"compare")' },
+    { a1: 'A7', value: 'Extra submissions' },
+    { a1: 'B7', value: '=COUNTIF(Analytics!E2:E,"extra")' },
+    { a1: 'A8', value: 'Partial/Emergency submissions' },
+    { a1: 'B8', value: '=COUNTIF(Analytics!F2:F,"partial")' },
+    { a1: 'A9', value: 'Average Compare score' },
+    { a1: 'B9', value: '=IFERROR(AVERAGEIF(Analytics!E2:E,"compare",Analytics!H2:H),"")' },
+    { a1: 'A10', value: 'Average Extra score' },
+    { a1: 'B10', value: '=IFERROR(AVERAGEIF(Analytics!E2:E,"extra",Analytics!H2:H),"")' },
+    { a1: 'A11', value: 'Average Patient B minus Patient A' },
+    { a1: 'B11', value: '=IFERROR(AVERAGE(FILTER(Analytics!P2:P,Analytics!E2:E="compare")),"")' },
+    { a1: 'A12', value: 'Average missed doses' },
+    { a1: 'B12', value: '=IFERROR(AVERAGE(FILTER(Analytics!K2:K,Analytics!K2:K<>"")),"")' },
+    { a1: 'D4', value: 'Prediction' },
+    { a1: 'E4', value: 'Count' },
+    { a1: 'A15', value: 'Period' },
+    { a1: 'B15', value: 'Submissions' },
+    { a1: 'C15', value: 'Average Score' },
+    { a1: 'D15', value: 'Partial/Emergency' },
+    { a1: 'E15', value: 'Average Missed Doses' }
+  ];
+
+  PREDICTION_CHOICE_OPTIONS.forEach(function(choice, index) {
+    const row = 5 + index;
+    cells.push({ a1: 'D' + row, value: choice });
+    cells.push({ a1: 'E' + row, value: '=COUNTIF(Analytics!L2:L,D' + row + ')' });
+  });
+
+  CONFIG.periods.forEach(function(period, index) {
+    const row = 16 + index;
+    cells.push({ a1: 'A' + row, value: period });
+    cells.push({ a1: 'B' + row, value: '=COUNTIF(Analytics!D2:D,A' + row + ')' });
+    cells.push({ a1: 'C' + row, value: '=IFERROR(AVERAGEIF(Analytics!D2:D,A' + row + ',Analytics!H2:H),"")' });
+    cells.push({ a1: 'D' + row, value: '=COUNTIFS(Analytics!D2:D,A' + row + ',Analytics!F2:F,"partial")' });
+    cells.push({ a1: 'E' + row, value: '=IFERROR(AVERAGEIF(Analytics!D2:D,A' + row + ',Analytics!K2:K),"")' });
+  });
+
+  return cells;
+}
+
+function writeDashboardCellIfBlank_(sheet, a1, value) {
+  const range = sheet.getRange(a1);
+  const currentValue = range.getValue();
+  if (currentValue === '' || currentValue === null) {
+    range.setValue(value);
   }
 }
 

@@ -42,8 +42,14 @@ function initApp() {
 
     onClick('compareSubmitBtn', submitCompareMode);
     onClick('extraSubmitBtn', submitExtraMode);
-    onClick('compareEmergencyBtn', () => emergencySubmit('compare'));
-    onClick('extraEmergencyBtn', () => emergencySubmit('extra'));
+    onClick('compareEmergencyBtn', () => openEmergencyConfirm('compare'));
+    onClick('extraEmergencyBtn', () => openEmergencyConfirm('extra'));
+    onClick('emergencyCancelBtn', closeEmergencyConfirm);
+    onClick('emergencySubmitBtn', confirmEmergencySubmit);
+    byId('emergencyConfirmInput').addEventListener('input', updateEmergencyConfirmState);
+    byId('emergencyConfirm').addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'emergencyConfirm') closeEmergencyConfirm();
+    });
     onClick('backToModesBtn1', () => showScreen('screen-mode'));
     onClick('backToModesBtn2', () => showScreen('screen-mode'));
     onClick('finishBackBtn', () => showScreen('screen-mode'));
@@ -53,6 +59,11 @@ function initApp() {
       if (e.target && e.target.id === 'overlay') continueOverlayAction();
     });
     document.addEventListener('keydown', (e) => {
+      if (appState.pendingEmergencyMode && e.key === 'Escape') {
+        e.preventDefault();
+        closeEmergencyConfirm();
+        return;
+      }
       if (!appState.overlayOpen) return;
       if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') {
         e.preventDefault();

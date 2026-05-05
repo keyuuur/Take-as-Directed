@@ -433,6 +433,20 @@
       </div>
     </div>
 
+    <div id="emergencyConfirm" class="overlay emergency-confirm hidden" role="dialog" aria-modal="true" aria-labelledby="emergencyConfirmTitle">
+      <div class="overlay-card emergency-card">
+        <h2 id="emergencyConfirmTitle">Emergency Submit</h2>
+        <p id="emergencyConfirmText">Emergency Submit saves partial work. Unfinished reflection questions score 0.</p>
+        <label class="type-confirm-label" for="emergencyConfirmInput">Type SUBMIT to unlock partial submission.</label>
+        <input id="emergencyConfirmInput" class="type-confirm-input" type="text" autocomplete="off" spellcheck="false" placeholder="Type SUBMIT">
+        <p id="emergencyConfirmFeedback" class="type-confirm-feedback">The submit button will unlock after the exact word is typed.</p>
+        <div class="modal-actions">
+          <button id="emergencyCancelBtn" class="btn btn-secondary" type="button">Cancel</button>
+          <button id="emergencySubmitBtn" class="btn danger-submit" type="button" disabled>Submit Partial Work</button>
+        </div>
+      </div>
+    </div>
+
     <?!= include('Script'); ?>
   </body>
 </html>
