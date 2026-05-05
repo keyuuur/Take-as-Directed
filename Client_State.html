@@ -1,0 +1,33 @@
+google.charts.load('current', { packages: ['corechart'] });
+  google.charts.setOnLoadCallback(initApp);
+
+  const appState = {
+    config: SERVER_CONFIG,
+    sessionId: '',
+    studentName: '',
+    period: '',
+    compare: null,
+    extra: null,
+    overlayAction: null,
+    chartsReady: false,
+    overlayOpen: false,
+    overlayBusy: false
+  };
+
+  const COLOR_ORDER = ['red', 'blue', 'yellow'];
+  const GOOD_DOSE_ROLLS = [2, 3, 4, 5];
+  const MISSED_DOSE_ROLLS = [1, 6];
+  const REMOVALS_PER_DOSE = 5;
+  const PATIENT_A_AUTO_ROLL = 4;
+
+  const LEFT_LUNG_SLOTS = [
+    [176, 148], [153, 170], [195, 171], [140, 196], [176, 196], [209, 196], [154, 223], [191, 224],
+    [133, 248], [168, 249], [203, 250], [147, 276], [181, 277], [214, 278], [160, 303], [195, 304],
+    [141, 327], [176, 331], [208, 329], [193, 145]
+  ];
+  const RIGHT_LUNG_SLOTS = [
+    [355, 148], [332, 170], [375, 170], [318, 196], [355, 196], [389, 196], [332, 223], [367, 223],
+    [304, 248], [339, 248], [374, 249], [318, 276], [353, 277], [388, 278], [332, 303], [367, 304],
+    [314, 327], [349, 330], [384, 329], [337, 146]
+  ];
+  const SLOT_ORDER = interleaveSlots(LEFT_LUNG_SLOTS, RIGHT_LUNG_SLOTS);

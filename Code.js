@@ -198,7 +198,7 @@ function doGet() {
 }
 
 function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+  return HtmlService.createTemplateFromFile(filename).evaluate().getContent();
 }
 
 function getClientBootstrap() {
@@ -215,7 +215,7 @@ function createSession(studentName, period) {
 
   const sessionId = Utilities.getUuid();
   const now = new Date();
-  const row = buildSessionRow_({
+  const sessionData = {
     timestamp: now,
     sessionId,
     studentName: cleanName,
@@ -237,9 +237,9 @@ function createSession(studentName, period) {
     extraTotalScore: 0,
     extraEmergencySubmitted: 'No',
     lastModeVisited: 'mode_select'
-  });
+  };
   const sheet = getSheet_('Sessions');
-  sheet.appendRow(row);
+  sheet.appendRow(buildRowForHeaders_(getHeaders_(sheet), sessionData));
   return {
     sessionId,
     studentName: cleanName,
@@ -308,9 +308,9 @@ function normalizePayload_(mode, payload, sessionInfo) {
   const studentName = String(payload.studentName || sessionInfo.record[sessionInfo.idx.studentName] || '');
   const period = String(payload.period || sessionInfo.record[sessionInfo.idx.period] || '');
   const submittedAt = new Date();
-  const history = Array.isArray(payload.history) ? payload.history : [];
-  const responses = Array.isArray(payload.responses) ? payload.responses : [];
-  const summary = payload.summary || {};
+  const history = normalizeHistory_(mode, Array.isArray(payload.history) ? payload.history : []);
+  const responses = normalizeResponses_(mode, Array.isArray(payload.responses) ? payload.responses : []);
+  const summary = buildVerifiedSummary_(mode, history, responses);
 
   const roundRows = history.map(function(step) {
     return [
@@ -319,15 +319,15 @@ function normalizePayload_(mode, payload, sessionInfo) {
       studentName,
       period,
       mode,
-      step.patientType || '',
-      step.round || '',
-      step.roll || '',
-      step.adherence || '',
-      step.red || 0,
-      step.blue || 0,
-      step.yellow || 0,
-      step.total || 0,
-      step.total > 0 ? (step.yellow || 0) / step.total : 0
+      step.patientType,
+      step.round,
+      step.roll,
+      step.adherence,
+      step.red,
+      step.blue,
+      step.yellow,
+      step.total,
+      step.yellowShare
     ];
   });
 
@@ -338,13 +338,13 @@ function normalizePayload_(mode, payload, sessionInfo) {
       studentName,
       period,
       mode,
-      resp.questionId || '',
-      resp.prompt || '',
-      resp.selected || '',
-      resp.correctAnswer || '',
+      resp.questionId,
+      resp.prompt,
+      resp.selected,
+      resp.correctAnswer,
       resp.isCorrect ? 'Yes' : 'No',
-      resp.pointsPossible || 0,
-      resp.pointsEarned || 0
+      resp.pointsPossible,
+      resp.pointsEarned
     ];
   });
 
@@ -353,9 +353,102 @@ function normalizePayload_(mode, payload, sessionInfo) {
     studentName,
     period,
     submittedAt,
+    history,
+    responses,
     roundRows,
     responseRows,
     summary
+  };
+}
+
+function normalizeHistory_(mode, history) {
+  return history.map(function(step) {
+    const red = toNonNegativeNumber_(step.red);
+    const blue = toNonNegativeNumber_(step.blue);
+    const yellow = toNonNegativeNumber_(step.yellow);
+    const total = red + blue + yellow;
+    return {
+      mode,
+      patientType: String(step.patientType || ''),
+      round: toNonNegativeNumber_(step.round),
+      roll: normalizeRoll_(step.roll),
+      adherence: String(step.adherence || ''),
+      red,
+      blue,
+      yellow,
+      total,
+      yellowShare: total > 0 ? yellow / total : 0
+    };
+  });
+}
+
+function normalizeResponses_(mode, responses) {
+  const points = mode === 'compare' ? CONFIG.comparePoints : CONFIG.extraPoints;
+  const perQuestion = responses.length ? points.reflection / responses.length : 0;
+  return responses.map(function(resp) {
+    const selected = String(resp.selected || '');
+    const correctAnswer = String(resp.correctAnswer || '');
+    const isCorrect = !!selected && selected === correctAnswer;
+    return {
+      questionId: String(resp.questionId || ''),
+      prompt: String(resp.prompt || ''),
+      selected,
+      correctAnswer,
+      isCorrect,
+      pointsPossible: perQuestion,
+      pointsEarned: isCorrect ? perQuestion : 0
+    };
+  });
+}
+
+function buildVerifiedSummary_(mode, history, responses) {
+  const reflectionAnswered = responses.filter(function(r) { return !!r.selected; }).length;
+  const reflectionCorrect = responses.filter(function(r) { return r.isCorrect; }).length;
+  const reflectionScore = responses.reduce(function(sum, r) { return sum + (r.pointsEarned || 0); }, 0);
+
+  if (mode === 'compare') {
+    const a = latestHistoryStep_(history, 'patient_a');
+    const b = latestHistoryStep_(history, 'patient_b');
+    const completedRounds = Math.min(maxRoundForPatient_(history, 'patient_a'), maxRoundForPatient_(history, 'patient_b'));
+    const completionScore = completedRounds === CONFIG.compareRounds ? CONFIG.comparePoints.completion : 0;
+    return {
+      completedRounds,
+      reflectionAnswered,
+      reflectionCorrect,
+      completionScore,
+      reflectionScore,
+      totalScore: completionScore + reflectionScore,
+      patientAFinalRed: a.red,
+      patientAFinalBlue: a.blue,
+      patientAFinalYellow: a.yellow,
+      patientAFinalTotal: a.total,
+      patientBFinalRed: b.red,
+      patientBFinalBlue: b.blue,
+      patientBFinalYellow: b.yellow,
+      patientBFinalTotal: b.total,
+      patientBMissedDoses: history.filter(function(step) {
+        return step.patientType === 'patient_b' && step.round > 0 && isMissedRoll_(step.roll);
+      }).length
+    };
+  }
+
+  const end = latestHistoryStep_(history, 'random_patient');
+  const completedRounds = maxRoundForPatient_(history, 'random_patient');
+  const completionScore = completedRounds === CONFIG.extraRounds ? CONFIG.extraPoints.completion : 0;
+  return {
+    completedRounds,
+    reflectionAnswered,
+    reflectionCorrect,
+    completionScore,
+    reflectionScore,
+    totalScore: completionScore + reflectionScore,
+    finalRed: end.red,
+    finalBlue: end.blue,
+    finalYellow: end.yellow,
+    finalTotal: end.total,
+    missedDoses: history.filter(function(step) {
+      return step.patientType === 'random_patient' && step.round > 0 && isMissedRoll_(step.roll);
+    }).length
   };
 }
 
@@ -442,13 +535,22 @@ function ensureSheet_(name, headers) {
   if (!sheet) {
     sheet = ss.insertSheet(name);
   }
-  const existingHeaders = sheet.getLastRow() >= 1 ? sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), headers.length)).getValues()[0] : [];
-  const needsHeader = headers.some(function(h, i) { return existingHeaders[i] !== h; });
-  if (sheet.getLastRow() === 0 || needsHeader) {
-    sheet.clear();
+
+  if (sheet.getLastRow() === 0 || sheet.getLastColumn() === 0) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.setFrozenRows(1);
+    return;
   }
+
+  const existingHeaders = getHeaders_(sheet);
+  const missingHeaders = headers.filter(function(header) {
+    return existingHeaders.indexOf(header) === -1;
+  });
+  if (missingHeaders.length) {
+    // Never clear classroom data. New expected columns are added to the right instead.
+    sheet.getRange(1, sheet.getLastColumn() + 1, 1, missingHeaders.length).setValues([missingHeaders]);
+  }
+  sheet.setFrozenRows(1);
 }
 
 function sessionHeaders_() {
@@ -472,8 +574,18 @@ function getSheet_(name) {
 }
 
 function buildSessionRow_(obj) {
-  const headers = sessionHeaders_();
+  return buildRowForHeaders_(sessionHeaders_(), obj);
+}
+
+function buildRowForHeaders_(headers, obj) {
   return headers.map(function(h) { return obj[h] !== undefined ? obj[h] : ''; });
+}
+
+function getHeaders_(sheet) {
+  if (sheet.getLastColumn() === 0) return [];
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function(h) {
+    return String(h || '');
+  });
 }
 
 function headerMap_(headers) {
@@ -481,6 +593,36 @@ function headerMap_(headers) {
     map[h] = i;
     return map;
   }, {});
+}
+
+function latestHistoryStep_(history, patientType) {
+  const matches = history.filter(function(step) { return step.patientType === patientType; });
+  if (!matches.length) return emptyCountsStep_();
+  return matches[matches.length - 1];
+}
+
+function maxRoundForPatient_(history, patientType) {
+  return history.reduce(function(max, step) {
+    return step.patientType === patientType ? Math.max(max, toNonNegativeNumber_(step.round)) : max;
+  }, 0);
+}
+
+function emptyCountsStep_() {
+  return { red: 0, blue: 0, yellow: 0, total: 0 };
+}
+
+function normalizeRoll_(roll) {
+  if (roll === '' || roll === null || roll === undefined) return '';
+  return toNonNegativeNumber_(roll);
+}
+
+function isMissedRoll_(roll) {
+  return roll === 1 || roll === 6;
+}
+
+function toNonNegativeNumber_(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
 function getClientConfig_() {

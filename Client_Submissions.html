@@ -1,0 +1,253 @@
+function buildCompareReflection() {
+    const state = appState.compare;
+    state.summary = summarizeCompare();
+    google.script.run
+      .withSuccessHandler((questions) => {
+        state.reflection = questions.map((q, i) => ({
+          questionId: `CQ${i + 1}`,
+          prompt: q.prompt,
+          choices: q.choices,
+          correctAnswer: q.answer,
+          selected: ''
+        }));
+        renderCompareView();
+      })
+      .withFailureHandler(handleServerError)
+      .buildCompareReflection(state.summary);
+  }
+
+  function buildExtraReflection() {
+    const state = appState.extra;
+    state.summary = summarizeExtra();
+    google.script.run
+      .withSuccessHandler((questions) => {
+        state.reflection = questions.map((q, i) => ({
+          questionId: `EQ${i + 1}`,
+          prompt: q.prompt,
+          choices: shuffleArray(q.choices.slice()),
+          correctAnswer: q.answer,
+          selected: ''
+        }));
+        renderExtraView();
+      })
+      .withFailureHandler(handleServerError)
+      .buildExtraReflection(state.summary);
+  }
+
+  function summarizeCompare() {
+    const state = appState.compare;
+    const a = state.patientA.history[state.patientA.history.length - 1];
+    const b = state.patientB.history[state.patientB.history.length - 1];
+    return {
+      compare: {
+        patientATotalFinal: a.total,
+        patientBTotalFinal: b.total,
+        patientAYellowShareFinal: a.total ? a.yellow / a.total : 0,
+        patientBYellowShareFinal: b.total ? b.yellow / b.total : 0,
+        patientBMissedDoses: state.patientB.missedDoses
+      },
+      patientA: a,
+      patientB: b
+    };
+  }
+
+  function summarizeExtra() {
+    const state = appState.extra;
+    const end = state.patient.history[state.patient.history.length - 1];
+    return {
+      extra: {
+        missedDoses: state.missedDoses,
+        totalFinal: end.total,
+        finalCounts: { red: end.red, blue: end.blue, yellow: end.yellow }
+      }
+    };
+  }
+
+  function buildCompareSummaryHtml(summary) {
+    const a = summary.compare.patientATotalFinal;
+    const b = summary.compare.patientBTotalFinal;
+    const better = a < b ? 'Patient A finished with fewer bacteria.' : a > b ? 'Patient B finished with fewer bacteria.' : 'Both patients finished with the same total.';
+    return `
+      <h3>Compare-mode summary</h3>
+      <p><strong>${better}</strong></p>
+      <p>Patient B missed <strong>${summary.compare.patientBMissedDoses}</strong> dose(s).</p>
+      <p>Use the separate graphs above and your final counts to answer the reflection questions.</p>
+    `;
+  }
+
+  function buildExtraSummaryHtml(summary) {
+    return `
+      <h3>Extra-credit summary</h3>
+      <p>Your patient missed <strong>${summary.extra.missedDoses}</strong> dose(s) and finished with <strong>${summary.extra.totalFinal}</strong> total bacteria.</p>
+      <p>Use your graph and your final counts to answer the reflection questions.</p>
+    `;
+  }
+
+  function renderQuestions(containerId, questions, mode) {
+    byId(containerId).innerHTML = questions.map((q, idx) => `
+      <fieldset class="question-card">
+        <legend>${idx + 1}. ${escapeHtml(q.prompt)}</legend>
+        ${q.choices.map(choice => `
+          <label class="choice">
+            <input type="radio" name="${mode}_${q.questionId}" value="${escapeAttr(choice)}" ${q.selected === choice ? 'checked' : ''}>
+            <span>${escapeHtml(choice)}</span>
+          </label>
+        `).join('')}
+      </fieldset>
+    `).join('');
+    questions.forEach(q => {
+      document.querySelectorAll(`input[name="${mode}_${q.questionId}"]`).forEach(input => {
+        input.addEventListener('change', e => { q.selected = e.target.value; });
+      });
+    });
+  }
+
+  function submitCompareMode() {
+    const state = appState.compare;
+    if (!state || !state.summary) return;
+    if (!allQuestionsAnswered(state.reflection)) return alert('Please answer all compare-mode reflection questions before submitting.');
+    const responses = collectResponses(state.reflection, appState.config.comparePoints.reflection);
+    const reflectionScore = sumScores(responses);
+    const payload = {
+      sessionId: appState.sessionId,
+      studentName: appState.studentName,
+      period: appState.period,
+      history: [...state.patientA.history, ...state.patientB.history],
+      responses,
+      summary: {
+        completedRounds: state.roundsCompleted,
+        reflectionAnswered: responses.filter(r => r.selected).length,
+        reflectionCorrect: responses.filter(r => r.isCorrect).length,
+        completionScore: state.roundsCompleted === appState.config.compareRounds ? appState.config.comparePoints.completion : 0,
+        reflectionScore,
+        totalScore: (state.roundsCompleted === appState.config.compareRounds ? appState.config.comparePoints.completion : 0) + reflectionScore,
+        patientAFinalRed: state.patientA.counts.red,
+        patientAFinalBlue: state.patientA.counts.blue,
+        patientAFinalYellow: state.patientA.counts.yellow,
+        patientAFinalTotal: countTotal(state.patientA.counts),
+        patientBFinalRed: state.patientB.counts.red,
+        patientBFinalBlue: state.patientB.counts.blue,
+        patientBFinalYellow: state.patientB.counts.yellow,
+        patientBFinalTotal: countTotal(state.patientB.counts),
+        patientBMissedDoses: state.patientB.missedDoses
+      }
+    };
+    setBusy(true);
+    google.script.run
+      .withSuccessHandler(() => {
+        setBusy(false);
+        state.submitted = true;
+        showFinish(`<p><strong>Compare mode submitted.</strong></p><p>Score recorded: ${payload.summary.totalScore} / ${appState.config.comparePoints.total}</p>`);
+      })
+      .withFailureHandler(handleServerError)
+      .saveCompareSubmission(payload);
+  }
+
+  function submitExtraMode() {
+    const state = appState.extra;
+    if (!state || !state.summary) return;
+    if (!allQuestionsAnswered(state.reflection)) return alert('Please answer all extra-credit reflection questions before submitting.');
+    const responses = collectResponses(state.reflection, appState.config.extraPoints.reflection);
+    const reflectionScore = sumScores(responses);
+    const payload = {
+      sessionId: appState.sessionId,
+      studentName: appState.studentName,
+      period: appState.period,
+      history: state.patient.history,
+      responses,
+      summary: {
+        completedRounds: state.roundsCompleted,
+        reflectionAnswered: responses.filter(r => r.selected).length,
+        reflectionCorrect: responses.filter(r => r.isCorrect).length,
+        completionScore: state.roundsCompleted === appState.config.extraRounds ? appState.config.extraPoints.completion : 0,
+        reflectionScore,
+        totalScore: (state.roundsCompleted === appState.config.extraRounds ? appState.config.extraPoints.completion : 0) + reflectionScore,
+        finalRed: state.patient.counts.red,
+        finalBlue: state.patient.counts.blue,
+        finalYellow: state.patient.counts.yellow,
+        finalTotal: countTotal(state.patient.counts),
+        missedDoses: state.missedDoses
+      }
+    };
+    setBusy(true);
+    google.script.run
+      .withSuccessHandler(() => {
+        setBusy(false);
+        state.submitted = true;
+        showFinish(`<p><strong>Extra-credit mode submitted.</strong></p><p>Points recorded: ${payload.summary.totalScore} / ${appState.config.extraPoints.total}</p>`);
+      })
+      .withFailureHandler(handleServerError)
+      .saveExtraSubmission(payload);
+  }
+
+  function emergencySubmit(mode) {
+    const state = appState[mode];
+    if (!state) return;
+    const isCompare = mode === 'compare';
+    const points = isCompare ? appState.config.comparePoints : appState.config.extraPoints;
+    const reflection = state.reflection || [];
+    const responses = collectResponses(reflection, points.reflection);
+    const reflectionScore = sumScores(responses);
+    const payload = {
+      mode,
+      sessionId: appState.sessionId,
+      studentName: appState.studentName,
+      period: appState.period,
+      history: isCompare ? [...(state.patientA ? state.patientA.history : []), ...(state.patientB ? state.patientB.history : [])] : (state.patient ? state.patient.history : []),
+      responses,
+      summary: isCompare ? {
+        completedRounds: state.roundsCompleted || 0,
+        reflectionAnswered: responses.filter(r => r.selected).length,
+        reflectionCorrect: responses.filter(r => r.isCorrect).length,
+        completionScore: (state.roundsCompleted === appState.config.compareRounds) ? appState.config.comparePoints.completion : 0,
+        reflectionScore,
+        totalScore: ((state.roundsCompleted === appState.config.compareRounds) ? appState.config.comparePoints.completion : 0) + reflectionScore,
+        patientAFinalRed: state.patientA ? state.patientA.counts.red : 0,
+        patientAFinalBlue: state.patientA ? state.patientA.counts.blue : 0,
+        patientAFinalYellow: state.patientA ? state.patientA.counts.yellow : 0,
+        patientAFinalTotal: state.patientA ? countTotal(state.patientA.counts) : 0,
+        patientBFinalRed: state.patientB ? state.patientB.counts.red : 0,
+        patientBFinalBlue: state.patientB ? state.patientB.counts.blue : 0,
+        patientBFinalYellow: state.patientB ? state.patientB.counts.yellow : 0,
+        patientBFinalTotal: state.patientB ? countTotal(state.patientB.counts) : 0,
+        patientBMissedDoses: state.patientB ? state.patientB.missedDoses : 0
+      } : {
+        completedRounds: state.roundsCompleted || 0,
+        reflectionAnswered: responses.filter(r => r.selected).length,
+        reflectionCorrect: responses.filter(r => r.isCorrect).length,
+        completionScore: (state.roundsCompleted === appState.config.extraRounds) ? appState.config.extraPoints.completion : 0,
+        reflectionScore,
+        totalScore: ((state.roundsCompleted === appState.config.extraRounds) ? appState.config.extraPoints.completion : 0) + reflectionScore,
+        finalRed: state.patient ? state.patient.counts.red : 0,
+        finalBlue: state.patient ? state.patient.counts.blue : 0,
+        finalYellow: state.patient ? state.patient.counts.yellow : 0,
+        finalTotal: state.patient ? countTotal(state.patient.counts) : 0,
+        missedDoses: state.missedDoses || 0
+      }
+    };
+    setBusy(true);
+    google.script.run
+      .withSuccessHandler(() => {
+        setBusy(false);
+        showFinish(`<p><strong>Emergency submit saved.</strong></p><p>This submission was marked partial. Unfinished questions were scored as 0.</p><p>Recorded points: ${payload.summary.totalScore} / ${points.total}</p>`);
+      })
+      .withFailureHandler(handleServerError)
+      .saveEmergencySubmission(payload);
+  }
+
+  function collectResponses(questions, pointsTotal) {
+    if (!questions || !questions.length) return [];
+    const perQuestion = pointsTotal / questions.length;
+    return questions.map(q => {
+      const isCorrect = q.selected === q.correctAnswer;
+      return {
+        questionId: q.questionId,
+        prompt: q.prompt,
+        selected: q.selected || '',
+        correctAnswer: q.correctAnswer,
+        isCorrect,
+        pointsPossible: perQuestion,
+        pointsEarned: isCorrect ? perQuestion : 0
+      };
+    });
+  }

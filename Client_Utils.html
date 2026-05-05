@@ -1,0 +1,195 @@
+function commitPatientRound(patient, round, roll, counts, mode) {
+    patient.counts = cloneCounts(counts);
+    patient.history.push(makeHistoryStep(mode, patient.type, round, roll, adherenceLabel(roll), cloneCounts(patient.counts)));
+    patient.displayHistory.push(cloneCounts(patient.counts));
+  }
+
+  function reproduceAndCommitRound(state, patient, roll, sourceCounts, mode) {
+    const counts = cloneCounts(sourceCounts);
+    patient.flashAdded = reproduceCounts(counts);
+    commitPatientRound(patient, state.activeRound, roll, counts, mode);
+  }
+
+  function makeHistoryStep(mode, patientType, round, roll, adherence, counts) {
+    return {
+      mode,
+      patientType,
+      round,
+      roll,
+      adherence,
+      red: counts.red,
+      blue: counts.blue,
+      yellow: counts.yellow,
+      total: countTotal(counts)
+    };
+  }
+
+  function reproduceCounts(counts) {
+    const added = [];
+    COLOR_ORDER.forEach(color => {
+      if (counts[color] > 0) {
+        counts[color] += 1;
+        added.push(color);
+      }
+    });
+    return added;
+  }
+
+  function canRemoveColor(counts, color) {
+    if ((counts.red || 0) > 0) return color === 'red';
+    if ((counts.blue || 0) > 0) return color === 'blue';
+    return color === 'yellow' && (counts.yellow || 0) > 0;
+  }
+
+  function adherenceLabel(roll) {
+    if (roll === '' || roll === null || roll === undefined) return 'Starting population';
+    return isMissedDose(roll) ? 'Missed dose' : 'Took dose on time';
+  }
+
+  function isMissedDose(roll) {
+    return MISSED_DOSE_ROLLS.includes(roll);
+  }
+
+  function generatePoorAdherenceRolls(rounds) {
+    const missedCount = Math.random() < 0.5 ? 2 : 3;
+    const picks = new Set();
+    while (picks.size < missedCount) picks.add(1 + Math.floor(Math.random() * rounds));
+    const arr = Array.from(picks).sort((a, b) => a - b);
+    if (arr.length > 1) {
+      const allEarly = arr.every(r => r <= Math.ceil(rounds / 2));
+      const allLate = arr.every(r => r > Math.floor(rounds / 2));
+      if (allEarly) arr[arr.length - 1] = rounds - Math.floor(Math.random() * 2);
+      if (allLate) arr[0] = 1 + Math.floor(Math.random() * 2);
+    }
+    const missed = new Set(arr);
+    const good = GOOD_DOSE_ROLLS;
+    const bad = MISSED_DOSE_ROLLS;
+    return Array.from({ length: rounds }, (_, idx) => missed.has(idx + 1)
+      ? bad[Math.floor(Math.random() * bad.length)]
+      : good[Math.floor(Math.random() * good.length)]);
+  }
+
+  function allQuestionsAnswered(questions) {
+    return questions.every(q => !!q.selected);
+  }
+
+  function sumScores(responses) {
+    return responses.reduce((sum, r) => sum + (r.pointsEarned || 0), 0);
+  }
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(screen => screen.classList.remove('active'));
+    byId(id).classList.add('active');
+  }
+
+  function showFinish(html) {
+    byId('finishMessage').innerHTML = html;
+    showScreen('screen-finish');
+  }
+
+  function openOverlay(title, text, action) {
+    appState.overlayAction = action;
+    appState.overlayOpen = true;
+    appState.overlayBusy = false;
+    byId('overlayTitle').textContent = title;
+    byId('overlayText').textContent = text;
+    const btn = byId('overlayContinueBtn');
+    btn.disabled = false;
+    btn.textContent = 'Continue';
+    byId('overlay').classList.remove('hidden');
+    setTimeout(() => btn.focus(), 0);
+  }
+
+  function continueOverlayAction() {
+    if (!appState.overlayOpen || appState.overlayBusy) return;
+    appState.overlayBusy = true;
+    const action = appState.overlayAction;
+    appState.overlayAction = null;
+    appState.overlayOpen = false;
+    byId('overlay').classList.add('hidden');
+
+    try {
+      if (typeof action === 'function') action();
+    } catch (err) {
+      console.error('Overlay action failed:', err);
+      alert('Something went wrong while continuing the round. Please refresh and try again.');
+    } finally {
+      appState.overlayBusy = false;
+    }
+  }
+
+  function setBusy(flag) {
+    document.querySelectorAll('button').forEach(btn => {
+      if (btn.id === 'overlayContinueBtn' && !flag) return;
+      btn.disabled = flag;
+    });
+  }
+
+  function handleServerError(err) {
+    setBusy(false);
+    const msg = err && err.message ? err.message : 'Something went wrong.';
+    alert(msg);
+  }
+
+  function cloneCounts(counts) {
+    return { red: counts.red || 0, blue: counts.blue || 0, yellow: counts.yellow || 0 };
+  }
+
+  function countTotal(counts) {
+    return (counts.red || 0) + (counts.blue || 0) + (counts.yellow || 0);
+  }
+
+  function countMatching(arr, value) {
+    return (arr || []).filter(v => v === value).length;
+  }
+
+  function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function interleaveSlots(left, right) {
+    const out = [];
+    const max = Math.max(left.length, right.length);
+    for (let i = 0; i < max; i++) {
+      if (left[i]) out.push(left[i]);
+      if (right[i]) out.push(right[i]);
+    }
+    return out;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+  }
+
+  function escapeAttr(str) {
+    return escapeHtml(str).replace(/`/g, '&#96;');
+  }
+
+  function onClick(id, handler) {
+    byId(id).addEventListener('click', handler);
+  }
+
+  function setText(id, value) {
+    byId(id).textContent = value;
+  }
+
+  function setHtml(id, value) {
+    byId(id).innerHTML = value;
+  }
+
+  function setHidden(id, hidden) {
+    byId(id).classList.toggle('hidden', hidden);
+  }
+
+  function resetActionControls(mode) {
+    const ids = mode === 'compare'
+      ? ['compareMainBtn', 'compareRollBtn', 'compareRemoveControls']
+      : ['extraMainBtn', 'extraRollBtn', 'extraRemoveControls'];
+    ids.forEach(id => setHidden(id, true));
+  }
+
+  function byId(id) { return document.getElementById(id); }

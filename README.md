@@ -8,13 +8,13 @@ Google Apps Script classroom game for modeling antibiotic adherence and bacteria
 
 - `Code.js` is the Apps Script server file. It creates sessions, builds reflection questions, saves submissions, and sets up the connected Sheet tabs.
 - `Index.html` contains the screen markup and stable element IDs used by the client script.
-- `Script.html` owns the client-side game state, phase changes, rendering, charts, overlays, and `google.script.run` calls.
+- `Script.html` is now a small client-script loader. The `Client_*.html` partials split state, startup, gameplay flow, rendering, submissions, and utilities.
 - `Styles.html` owns the student-facing arcade UI and iPad layout rules.
 - `appsscript.json` stores the Apps Script runtime and web app settings.
 
 ### Refactored Game Flow
 
-- Shared gameplay constants live near the top of `Script.html`: color order, good-dose rolls, missed-dose rolls, removals per dose, and Patient A's automatic roll.
+- Shared gameplay constants live near the top of `Client_State.html`: color order, good-dose rolls, missed-dose rolls, removals per dose, and Patient A's automatic roll.
 - Compare mode and Extra mode both use the same treatment helpers where practical.
 - Compare mode is intentionally sequential: students finish all Patient A rounds first, then all Patient B rounds, then compare the final results.
 - Patient A and Patient B keep separate progress counters so the UI can say exactly which mission and round students are working on.
@@ -48,7 +48,8 @@ Before pushing to Apps Script:
 
 - Confirm all `byId(...)` references still match IDs in `Index.html`.
 - Confirm there are no duplicate IDs.
-- Run a syntax check on `Script.html`.
+- Run `powershell -ExecutionPolicy Bypass -File .\tools\run-client-flow-check.ps1`.
+- Run syntax checks on `Code.js` and the concatenated client partials.
 - Run `clasp status` from this folder.
 - Test Compare mode taken-dose and missed-dose branches.
 - Test Extra mode taken-dose and missed-dose branches.

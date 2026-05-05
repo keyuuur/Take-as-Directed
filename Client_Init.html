@@ -1,0 +1,95 @@
+function initApp() {
+    appState.chartsReady = true;
+    populatePeriods();
+    bindEvents();
+  }
+
+  function populatePeriods() {
+    const select = document.getElementById('periodSelect');
+    select.innerHTML = '<option value="">Choose period</option>' + appState.config.periods.map(p => `<option value="${p}">${p}</option>`).join('');
+  }
+
+  function bindEvents() {
+    onClick('startBtn', startSession);
+    onClick('openCompareBtn', () => {
+      if (!appState.compare) appState.compare = createCompareState();
+      showScreen('screen-compare');
+      renderCompareView();
+    });
+    onClick('openExtraBtn', () => {
+      if (!appState.extra) appState.extra = createExtraState();
+      showScreen('screen-extra');
+      renderExtraView();
+    });
+
+    onClick('compareMainBtn', handleCompareMainButton);
+    onClick('compareRollBtn', rollComparePatientB);
+    document.querySelectorAll('#compareRemoveControls .remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => removeFromActive('compare', btn.dataset.color));
+    });
+
+    onClick('extraMainBtn', handleExtraMainButton);
+    onClick('extraRollBtn', rollExtraPatient);
+    document.querySelectorAll('#extraRemoveControls .remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => removeFromActive('extra', btn.dataset.color));
+    });
+
+    onClick('compareSubmitBtn', submitCompareMode);
+    onClick('extraSubmitBtn', submitExtraMode);
+    onClick('compareEmergencyBtn', () => emergencySubmit('compare'));
+    onClick('extraEmergencyBtn', () => emergencySubmit('extra'));
+    onClick('backToModesBtn1', () => showScreen('screen-mode'));
+    onClick('backToModesBtn2', () => showScreen('screen-mode'));
+    onClick('finishBackBtn', () => showScreen('screen-mode'));
+
+    byId('overlayContinueBtn').onclick = continueOverlayAction;
+    byId('overlay').addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'overlay') continueOverlayAction();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (!appState.overlayOpen) return;
+      if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') {
+        e.preventDefault();
+        continueOverlayAction();
+      }
+    });
+  }
+
+  function startSession() {
+    const name = byId('studentName').value.trim();
+    const period = byId('periodSelect').value;
+    const errorEl = byId('loginError');
+    errorEl.classList.add('hidden');
+    errorEl.textContent = '';
+
+    if (!name) return showLoginError('Please enter your full name.');
+    if (!period) return showLoginError('Please choose your period.');
+
+    setBusy(true);
+    google.script.run
+      .withSuccessHandler((result) => {
+        setBusy(false);
+        appState.sessionId = result.sessionId;
+        appState.studentName = result.studentName;
+        appState.period = result.period;
+        appState.compare = null;
+        appState.extra = null;
+        syncSessionUi(result);
+        showScreen('screen-mode');
+      })
+      .withFailureHandler(handleServerError)
+      .createSession(name, period);
+  }
+
+  function showLoginError(msg) {
+    const errorEl = byId('loginError');
+    errorEl.textContent = msg;
+    errorEl.classList.remove('hidden');
+  }
+
+  function syncSessionUi(result) {
+    setText('studentBadge', `${result.studentName} - Period ${result.period}`);
+    setHidden('studentBadge', false);
+    setText('compareStudentPill', `Student: ${result.studentName}`);
+    setText('extraStudentPill', `Student: ${result.studentName}`);
+  }

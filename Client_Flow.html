@@ -1,0 +1,304 @@
+function createCompareState() {
+    const starting = cloneCounts(appState.config.compareStarting);
+    return {
+      roundsCompleted: 0,
+      patientARoundsCompleted: 0,
+      patientBRoundsCompleted: 0,
+      activeRound: 0,
+      activePatientKey: 'patientA',
+      phase: 'idle',
+      currentRoll: null,
+      roundSummary: '',
+      patientA: makePatient('Patient A', 'patient_a', starting),
+      patientB: makePatient('Patient B', 'patient_b', starting, generatePoorAdherenceRolls(appState.config.compareRounds)),
+      working: null,
+      reflection: [],
+      summary: null,
+      submitted: false
+    };
+  }
+
+  function createExtraState() {
+    const starting = cloneCounts(appState.config.extraStarting);
+    return {
+      roundsCompleted: 0,
+      activeRound: 0,
+      phase: 'idle',
+      currentRoll: null,
+      roundSummary: '',
+      patient: makePatient('Your patient', 'random_patient', starting),
+      working: null,
+      missedDoses: 0,
+      reflection: [],
+      summary: null,
+      submitted: false
+    };
+  }
+
+  function makePatient(label, type, counts, rolls) {
+    return {
+      label,
+      type,
+      counts: cloneCounts(counts),
+      history: [makeHistoryStep(type === 'random_patient' ? 'extra' : 'compare', type, 0, '', 'Starting population', cloneCounts(counts))],
+      displayHistory: [cloneCounts(counts)],
+      rolls: Array.isArray(rolls) ? rolls.slice() : [],
+      missedDoses: 0,
+      flashAdded: []
+    };
+  }
+
+  function handleCompareMainButton() {
+    const state = appState.compare;
+    if (!state || state.submitted) return;
+    if (state.phase === 'idle' || state.phase === 'a_round_summary') {
+      beginComparePatientARound();
+      return;
+    }
+    if (state.phase === 'transition_to_b' || state.phase === 'b_round_summary') {
+      beginComparePatientBRound();
+    }
+  }
+
+  function handleExtraMainButton() {
+    const state = appState.extra;
+    if (!state || state.submitted) return;
+    if (state.phase === 'idle' || state.phase === 'round_summary') beginExtraRound();
+  }
+
+  function beginCompareRound() {
+    const state = appState.compare;
+    if (!state || state.roundsCompleted >= appState.config.compareRounds) return;
+    if (state.patientARoundsCompleted < appState.config.compareRounds) {
+      beginComparePatientARound();
+      return;
+    }
+    if (state.patientBRoundsCompleted < appState.config.compareRounds) {
+      beginComparePatientBRound();
+    }
+  }
+
+  function beginComparePatientARound() {
+    const state = appState.compare;
+    if (!state || state.patientARoundsCompleted >= appState.config.compareRounds) return;
+    state.activePatientKey = 'patientA';
+    state.activeRound = state.patientARoundsCompleted + 1;
+    state.currentRoll = null;
+    state.roundSummary = '';
+    state.patientA.flashAdded = [];
+    const workingCounts = cloneCounts(state.patientA.counts);
+    const removesLeft = Math.min(REMOVALS_PER_DOSE, countTotal(workingCounts));
+    state.working = { mode: 'compare', patientKey: 'patientA', roll: PATIENT_A_AUTO_ROLL, workingCounts, removesLeft };
+    state.phase = removesLeft > 0 ? 'a_remove' : 'a_round_summary';
+    if (removesLeft === 0) {
+      commitPatientRound(state.patientA, state.activeRound, PATIENT_A_AUTO_ROLL, workingCounts, 'compare');
+      state.working = null;
+      finishComparePatientARound();
+      return;
+    }
+    renderCompareView();
+  }
+
+  function beginComparePatientBRound() {
+    const state = appState.compare;
+    if (!state || state.patientARoundsCompleted < appState.config.compareRounds) return;
+    if (state.patientBRoundsCompleted >= appState.config.compareRounds) return;
+    state.activePatientKey = 'patientB';
+    state.activeRound = state.patientBRoundsCompleted + 1;
+    state.currentRoll = null;
+    state.roundSummary = '';
+    state.patientB.flashAdded = [];
+    state.phase = 'b_roll';
+    state.working = null;
+    renderCompareView();
+  }
+
+  function beginExtraRound() {
+    const state = appState.extra;
+    if (state.roundsCompleted >= appState.config.extraRounds) return;
+    state.activeRound = state.roundsCompleted + 1;
+    state.currentRoll = null;
+    state.roundSummary = '';
+    state.patient.flashAdded = [];
+    state.phase = 'extra_roll';
+    state.working = null;
+    renderExtraView();
+  }
+
+  function rollComparePatientB() {
+    const state = appState.compare;
+    if (!state || state.phase !== 'b_roll') return;
+    const roll = state.patientB.rolls[state.activeRound - 1];
+    state.currentRoll = roll;
+    if (isMissedDose(roll)) {
+      state.patientB.missedDoses += 1;
+      state.phase = 'b_missed';
+      renderCompareView();
+      openOverlay('REMAINING BACTERIA REPRODUCE!', 'Patient B missed the dose, so no bacteria were killed. One of each remaining type will reproduce.', () => {
+        reproduceAndCommitRound(state, state.patientB, roll, state.patientB.counts, 'compare');
+        finishComparePatientBRound();
+      });
+      return;
+    }
+    if (!startTreatmentPhase(state, state.patientB, 'patientB', roll, 'compare', 'b_remove', finishComparePatientBRound)) {
+      renderCompareView();
+    }
+  }
+
+  function rollExtraPatient() {
+    const state = appState.extra;
+    if (!state || state.phase !== 'extra_roll') return;
+    const roll = 1 + Math.floor(Math.random() * 6);
+    state.currentRoll = roll;
+    if (isMissedDose(roll)) {
+      state.missedDoses += 1;
+      state.phase = 'extra_missed';
+      renderExtraView();
+      openOverlay('REMAINING BACTERIA REPRODUCE!', 'The dose was missed this round, so one of each remaining type will reproduce.', () => {
+        reproduceAndCommitRound(state, state.patient, roll, state.patient.counts, 'extra');
+        finishExtraRound();
+      });
+      return;
+    }
+    if (!startTreatmentPhase(state, state.patient, 'patient', roll, 'extra', 'extra_remove', finishExtraRound)) {
+      renderExtraView();
+    }
+  }
+
+  function startTreatmentPhase(state, patient, patientKey, roll, mode, removePhase, finishRound) {
+    const workingCounts = cloneCounts(patient.counts);
+    const removesLeft = Math.min(REMOVALS_PER_DOSE, countTotal(workingCounts));
+    state.working = { mode, patientKey, roll, workingCounts, removesLeft };
+    state.phase = removesLeft > 0 ? removePhase : 'round_summary';
+    if (removesLeft > 0) return false;
+
+    commitPatientRound(patient, state.activeRound, roll, workingCounts, mode);
+    state.working = null;
+    finishRound();
+    return true;
+  }
+
+  function removeFromActive(mode, color) {
+    const state = mode === 'compare' ? appState.compare : appState.extra;
+    if (!state || !state.working || state.working.removesLeft <= 0) return;
+    const counts = state.working.workingCounts;
+    if (!canRemoveColor(counts, color)) return;
+    if (!counts[color]) return;
+
+    counts[color] -= 1;
+    state.working.removesLeft -= 1;
+
+    if (state.working.removesLeft <= 0) {
+      if (mode === 'compare' && state.working.patientKey === 'patientA') {
+        finishTreatmentWithReproduction({
+          state,
+          patient: state.patientA,
+          roll: PATIENT_A_AUTO_ROLL,
+          mode: 'compare',
+          render: renderCompareView,
+          text: 'Patient A finished this treatment round. One of each remaining type will reproduce.',
+          afterCommit: finishComparePatientARound
+        });
+        return;
+      }
+      if (mode === 'compare' && state.working.patientKey === 'patientB') {
+        finishTreatmentWithReproduction({
+          state,
+          patient: state.patientB,
+          roll: state.working.roll,
+          mode: 'compare',
+          render: renderCompareView,
+          text: 'Patient B finished this treatment round. One of each remaining type will reproduce.',
+          afterCommit: finishComparePatientBRound
+        });
+        return;
+      }
+      if (mode === 'extra') {
+        finishTreatmentWithReproduction({
+          state,
+          patient: state.patient,
+          roll: state.working.roll,
+          mode: 'extra',
+          render: renderExtraView,
+          text: 'The patient finished treatment for this round. One of each remaining type will reproduce.',
+          afterCommit: finishExtraRound
+        });
+        return;
+      }
+    }
+
+    if (mode === 'compare') renderCompareView();
+    else renderExtraView();
+  }
+
+  function finishTreatmentWithReproduction({ state, patient, roll, mode, render, text, afterCommit }) {
+    const sourceCounts = cloneCounts(state.working.workingCounts);
+    render();
+    openOverlay('REMAINING BACTERIA REPRODUCE!', text, () => {
+      reproduceAndCommitRound(state, patient, roll, sourceCounts, mode);
+      state.working = null;
+      afterCommit();
+    });
+  }
+
+  function finishCompareRound() {
+    const state = appState.compare;
+    if (!state) return;
+    if (state.activePatientKey === 'patientA') finishComparePatientARound();
+    else finishComparePatientBRound();
+  }
+
+  function finishComparePatientARound() {
+    const state = appState.compare;
+    if (!state) return;
+    const totalRounds = appState.config.compareRounds;
+    const latest = state.patientA.history[state.patientA.history.length - 1];
+    state.patientARoundsCompleted = Math.max(state.patientARoundsCompleted, state.activeRound);
+    state.roundsCompleted = Math.min(state.patientARoundsCompleted, state.patientBRoundsCompleted);
+    state.roundSummary = `Patient A Round ${state.patientARoundsCompleted} complete. Patient A now has ${latest.total} total bacteria.`;
+    state.currentRoll = null;
+    state.working = null;
+    if (state.patientARoundsCompleted >= totalRounds) {
+      state.activePatientKey = 'patientB';
+      state.activeRound = 0;
+      state.phase = 'transition_to_b';
+      state.roundSummary = `Patient A mission complete. Final Patient A total: ${latest.total}. Now run Patient B for ${totalRounds} rounds.`;
+    } else {
+      state.activePatientKey = 'patientA';
+      state.activeRound = state.patientARoundsCompleted;
+      state.phase = 'a_round_summary';
+    }
+    renderCompareView();
+  }
+
+  function finishComparePatientBRound() {
+    const state = appState.compare;
+    if (!state) return;
+    const totalRounds = appState.config.compareRounds;
+    const latest = state.patientB.history[state.patientB.history.length - 1];
+    state.patientBRoundsCompleted = Math.max(state.patientBRoundsCompleted, state.activeRound);
+    state.roundsCompleted = Math.min(state.patientARoundsCompleted, state.patientBRoundsCompleted);
+    state.roundSummary = `Patient B Round ${state.patientBRoundsCompleted} complete. Patient B now has ${latest.total} total bacteria.`;
+    state.working = null;
+    state.activePatientKey = 'patientB';
+    if (state.patientBRoundsCompleted >= totalRounds) {
+      state.roundsCompleted = totalRounds;
+      state.activeRound = totalRounds;
+      state.phase = 'finished';
+      buildCompareReflection();
+    } else {
+      state.activeRound = state.patientBRoundsCompleted;
+      state.phase = 'b_round_summary';
+    }
+    renderCompareView();
+  }
+
+  function finishExtraRound() {
+    const state = appState.extra;
+    const end = state.patient.history[state.patient.history.length - 1];
+    state.roundsCompleted = state.activeRound;
+    state.roundSummary = `Round ${state.activeRound} complete. Your patient now has ${end.total} total bacteria.`;
+    state.phase = state.roundsCompleted >= appState.config.extraRounds ? 'finished' : 'round_summary';
+    if (state.phase === 'finished') buildExtraReflection();
+    renderExtraView();
+  }
