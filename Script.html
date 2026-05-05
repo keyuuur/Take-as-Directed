@@ -133,7 +133,10 @@
     const starting = cloneCounts(appState.config.compareStarting);
     return {
       roundsCompleted: 0,
+      patientARoundsCompleted: 0,
+      patientBRoundsCompleted: 0,
       activeRound: 0,
+      activePatientKey: 'patientA',
       phase: 'idle',
       currentRoll: null,
       roundSummary: '',
@@ -179,7 +182,13 @@
   function handleCompareMainButton() {
     const state = appState.compare;
     if (!state || state.submitted) return;
-    if (state.phase === 'idle' || state.phase === 'round_summary') beginCompareRound();
+    if (state.phase === 'idle' || state.phase === 'a_round_summary') {
+      beginComparePatientARound();
+      return;
+    }
+    if (state.phase === 'transition_to_b' || state.phase === 'b_round_summary') {
+      beginComparePatientBRound();
+    }
   }
 
   function handleExtraMainButton() {
@@ -190,20 +199,48 @@
 
   function beginCompareRound() {
     const state = appState.compare;
-    if (state.roundsCompleted >= appState.config.compareRounds) return;
-    state.activeRound = state.roundsCompleted + 1;
+    if (!state || state.roundsCompleted >= appState.config.compareRounds) return;
+    if (state.patientARoundsCompleted < appState.config.compareRounds) {
+      beginComparePatientARound();
+      return;
+    }
+    if (state.patientBRoundsCompleted < appState.config.compareRounds) {
+      beginComparePatientBRound();
+    }
+  }
+
+  function beginComparePatientARound() {
+    const state = appState.compare;
+    if (!state || state.patientARoundsCompleted >= appState.config.compareRounds) return;
+    state.activePatientKey = 'patientA';
+    state.activeRound = state.patientARoundsCompleted + 1;
     state.currentRoll = null;
     state.roundSummary = '';
     state.patientA.flashAdded = [];
-    state.patientB.flashAdded = [];
     const workingCounts = cloneCounts(state.patientA.counts);
     const removesLeft = Math.min(REMOVALS_PER_DOSE, countTotal(workingCounts));
     state.working = { mode: 'compare', patientKey: 'patientA', roll: PATIENT_A_AUTO_ROLL, workingCounts, removesLeft };
-    state.phase = removesLeft > 0 ? 'a_remove' : 'b_roll';
+    state.phase = removesLeft > 0 ? 'a_remove' : 'a_round_summary';
     if (removesLeft === 0) {
       commitPatientRound(state.patientA, state.activeRound, PATIENT_A_AUTO_ROLL, workingCounts, 'compare');
       state.working = null;
+      finishComparePatientARound();
+      return;
     }
+    renderCompareView();
+  }
+
+  function beginComparePatientBRound() {
+    const state = appState.compare;
+    if (!state || state.patientARoundsCompleted < appState.config.compareRounds) return;
+    if (state.patientBRoundsCompleted >= appState.config.compareRounds) return;
+    state.activePatientKey = 'patientB';
+    state.activeRound = state.patientBRoundsCompleted + 1;
+    state.currentRoll = null;
+    state.roundSummary = '';
+    state.patientB.flashAdded = [];
+    state.phase = 'b_roll';
+    state.working = null;
     renderCompareView();
   }
 
@@ -230,11 +267,11 @@
       renderCompareView();
       openOverlay('REMAINING BACTERIA REPRODUCE!', 'Patient B missed the dose, so no bacteria were killed. One of each remaining type will reproduce.', () => {
         reproduceAndCommitRound(state, state.patientB, roll, state.patientB.counts, 'compare');
-        finishCompareRound();
+        finishComparePatientBRound();
       });
       return;
     }
-    if (!startTreatmentPhase(state, state.patientB, 'patientB', roll, 'compare', 'b_remove', finishCompareRound)) {
+    if (!startTreatmentPhase(state, state.patientB, 'patientB', roll, 'compare', 'b_remove', finishComparePatientBRound)) {
       renderCompareView();
     }
   }
@@ -290,11 +327,8 @@
           roll: PATIENT_A_AUTO_ROLL,
           mode: 'compare',
           render: renderCompareView,
-          text: 'Patient A finished treatment for this round. One of each remaining type will reproduce.',
-          afterCommit: () => {
-            state.phase = 'b_roll';
-            renderCompareView();
-          }
+          text: 'Patient A finished this treatment round. One of each remaining type will reproduce.',
+          afterCommit: finishComparePatientARound
         });
         return;
       }
@@ -305,8 +339,8 @@
           roll: state.working.roll,
           mode: 'compare',
           render: renderCompareView,
-          text: 'Patient B finished treatment for this round. One of each remaining type will reproduce.',
-          afterCommit: finishCompareRound
+          text: 'Patient B finished this treatment round. One of each remaining type will reproduce.',
+          afterCommit: finishComparePatientBRound
         });
         return;
       }
@@ -340,12 +374,53 @@
 
   function finishCompareRound() {
     const state = appState.compare;
-    const a = state.patientA.history[state.patientA.history.length - 1];
-    const b = state.patientB.history[state.patientB.history.length - 1];
-    state.roundsCompleted = state.activeRound;
-    state.roundSummary = `Round ${state.activeRound} complete. Patient A has ${a.total} total bacteria. Patient B has ${b.total} total bacteria.`;
-    state.phase = state.roundsCompleted >= appState.config.compareRounds ? 'finished' : 'round_summary';
-    if (state.phase === 'finished') buildCompareReflection();
+    if (!state) return;
+    if (state.activePatientKey === 'patientA') finishComparePatientARound();
+    else finishComparePatientBRound();
+  }
+
+  function finishComparePatientARound() {
+    const state = appState.compare;
+    if (!state) return;
+    const totalRounds = appState.config.compareRounds;
+    const latest = state.patientA.history[state.patientA.history.length - 1];
+    state.patientARoundsCompleted = Math.max(state.patientARoundsCompleted, state.activeRound);
+    state.roundsCompleted = Math.min(state.patientARoundsCompleted, state.patientBRoundsCompleted);
+    state.roundSummary = `Patient A Round ${state.patientARoundsCompleted} complete. Patient A now has ${latest.total} total bacteria.`;
+    state.currentRoll = null;
+    state.working = null;
+    if (state.patientARoundsCompleted >= totalRounds) {
+      state.activePatientKey = 'patientB';
+      state.activeRound = 0;
+      state.phase = 'transition_to_b';
+      state.roundSummary = `Patient A mission complete. Final Patient A total: ${latest.total}. Now run Patient B for ${totalRounds} rounds.`;
+    } else {
+      state.activePatientKey = 'patientA';
+      state.activeRound = state.patientARoundsCompleted;
+      state.phase = 'a_round_summary';
+    }
+    renderCompareView();
+  }
+
+  function finishComparePatientBRound() {
+    const state = appState.compare;
+    if (!state) return;
+    const totalRounds = appState.config.compareRounds;
+    const latest = state.patientB.history[state.patientB.history.length - 1];
+    state.patientBRoundsCompleted = Math.max(state.patientBRoundsCompleted, state.activeRound);
+    state.roundsCompleted = Math.min(state.patientARoundsCompleted, state.patientBRoundsCompleted);
+    state.roundSummary = `Patient B Round ${state.patientBRoundsCompleted} complete. Patient B now has ${latest.total} total bacteria.`;
+    state.working = null;
+    state.activePatientKey = 'patientB';
+    if (state.patientBRoundsCompleted >= totalRounds) {
+      state.roundsCompleted = totalRounds;
+      state.activeRound = totalRounds;
+      state.phase = 'finished';
+      buildCompareReflection();
+    } else {
+      state.activeRound = state.patientBRoundsCompleted;
+      state.phase = 'b_round_summary';
+    }
     renderCompareView();
   }
 
@@ -365,17 +440,19 @@
 
     const countsA = getDisplayedCounts('compare', 'patientA');
     const countsB = getDisplayedCounts('compare', 'patientB');
-    const visibleRound = Math.max(state.roundsCompleted, state.activeRound || 0);
+    const visibleRound = getCompareVisibleRound(state);
+    const badgeA = getCompareABadge(state);
+    const badgeB = getCompareBBadge(state);
     byId('compareHeaderTitle').textContent = 'ANTIBIOTIC RUN';
-    byId('compareRoundPill').textContent = `Round ${visibleRound} of ${appState.config.compareRounds}`;
-    byId('compareRoundStatus').textContent = `${visibleRound} of ${appState.config.compareRounds}`;
+    byId('compareRoundPill').textContent = getCompareRoundPillText(state);
+    byId('compareRoundStatus').textContent = `A ${state.patientARoundsCompleted} / ${appState.config.compareRounds} | B ${state.patientBRoundsCompleted} / ${appState.config.compareRounds}`;
     byId('compareMissedStatus').textContent = `${state.patientB.missedDoses} so far`;
 
-    byId('compareAHeaderBadge').textContent = 'Dose: taken';
-    byId('compareAHeaderBadge').className = 'small-status dose-good';
-    updateRollReadout('compareRollCard', 'compareRollDie', 'compareBRollBadge', state.currentRoll, state.phase, 'Waiting for Patient B');
-    byId('compareBHeaderBadge').className = 'small-status ' + getDoseBadgeClass(state.currentRoll, state.phase, true);
-    byId('compareBHeaderBadge').textContent = getDoseBadgeText(state.currentRoll, state.phase, true);
+    byId('compareAHeaderBadge').textContent = badgeA.text;
+    byId('compareAHeaderBadge').className = 'small-status ' + badgeA.cls;
+    updateRollReadout('compareRollCard', 'compareRollDie', 'compareBRollBadge', state.currentRoll, state.phase, getCompareRollWaitingText(state));
+    byId('compareBHeaderBadge').className = 'small-status ' + badgeB.cls;
+    byId('compareBHeaderBadge').textContent = badgeB.text;
 
     byId('compareAStatsBox').innerHTML = buildCountsBoxHtml(countsA);
     byId('compareBStatsBox').innerHTML = buildCountsBoxHtml(countsB);
@@ -439,33 +516,41 @@
 
     if (state.phase === 'idle') {
       title = 'Your action';
-      text = 'Click Start compare mode. You will treat Patient A first, then Patient B.';
-      setText('compareMainBtn', 'Start compare mode');
+      text = `Mission 1: complete all ${appState.config.compareRounds} rounds for Patient A first. Then you will run Patient B.`;
+      setText('compareMainBtn', 'Start Patient A Mission');
       setHidden('compareMainBtn', false);
     } else if (state.phase === 'a_remove') {
-      title = 'Your action: Patient A';
-      text = `Remove ${REMOVALS_PER_DOSE} bacteria from Patient A. Start with red, then blue, then yellow.`;
+      title = `Patient A: Round ${state.activeRound}`;
+      text = `Patient A took the dose. Remove ${REMOVALS_PER_DOSE} bacteria from Patient A. Start with red, then blue, then yellow.`;
       setHidden('compareRemoveControls', false);
       setText('compareRemoveInfo', `${working.removesLeft} bacteria left to remove this round.`);
+    } else if (state.phase === 'a_round_summary') {
+      title = 'Patient A round complete';
+      text = state.roundSummary;
+      setText('compareMainBtn', `Start Patient A Round ${state.patientARoundsCompleted + 1}`);
+      setHidden('compareMainBtn', false);
+    } else if (state.phase === 'transition_to_b') {
+      title = 'Patient B mission ready';
+      text = `Patient A is fully complete. Now run Patient B for all ${appState.config.compareRounds} rounds. Patient B rolls one die each round.`;
+      setText('compareMainBtn', 'Start Patient B Mission');
+      setHidden('compareMainBtn', false);
     } else if (state.phase === 'b_roll') {
-      title = 'Your action: Patient B';
-      text = 'Patient A is finished. Now roll for Patient B.';
+      title = `Patient B: Round ${state.activeRound}`;
+      text = 'Roll one die for Patient B. A 1 or 6 means the dose was missed.';
       setHidden('compareRollBtn', false);
     } else if (state.phase === 'b_remove') {
-      title = 'Your action: Patient B';
+      title = `Patient B: Round ${state.activeRound}`;
       text = `Patient B rolled ${state.currentRoll}. Remove ${REMOVALS_PER_DOSE} bacteria in the correct order.`;
       setHidden('compareRemoveControls', false);
       setText('compareRemoveInfo', `${working.removesLeft} bacteria left to remove this round.`);
     } else if (state.phase === 'b_missed') {
-      title = 'Your action: Patient B';
+      title = `Patient B: Round ${state.activeRound}`;
       text = `Patient B rolled ${state.currentRoll}. The dose was missed, so the remaining bacteria will reproduce.`;
-    } else if (state.phase === 'round_summary') {
-      title = 'Round complete';
+    } else if (state.phase === 'b_round_summary') {
+      title = 'Patient B round complete';
       text = state.roundSummary;
-      if (state.roundsCompleted < appState.config.compareRounds) {
-        setText('compareMainBtn', `Start Round ${state.roundsCompleted + 1}`);
-        setHidden('compareMainBtn', false);
-      }
+      setText('compareMainBtn', `Start Patient B Round ${state.patientBRoundsCompleted + 1}`);
+      setHidden('compareMainBtn', false);
     } else if (state.phase === 'finished') {
       title = 'Reflection';
       text = state.summary
@@ -522,9 +607,10 @@
   function updateCompareArcadeHud(state, countsA, countsB, visibleRound) {
     const activeKey = getCompareActivePatientKey(state);
     const activeCounts = activeKey === 'patientB' ? countsB : countsA;
-    const activeLabel = activeKey === 'patientB' ? 'Patient B' : 'Patient A';
+    const activeLabel = getCompareActiveLabel(state, activeKey);
     const directive = getArcadeDirective('compare', state, activeLabel);
     const totalRounds = appState.config.compareRounds;
+    const completedForActive = activeKey === 'patientB' ? state.patientBRoundsCompleted : state.patientARoundsCompleted;
 
     setPhaseClasses('compareGameShell', 'mode-compare', state.phase, activeKey);
     byId('comparePatientACard').classList.toggle('active-patient', activeKey === 'patientA');
@@ -535,9 +621,9 @@
     byId('compareActivePatientLabel').textContent = activeLabel;
     byId('compareCurrentPatient').textContent = activeLabel;
     byId('compareCountSummary').innerHTML = buildSummaryCountsHtml(activeCounts);
-    byId('compareProgressDots').innerHTML = buildProgressDots(state.roundsCompleted, visibleRound, totalRounds);
+    byId('compareProgressDots').innerHTML = buildProgressDots(completedForActive, visibleRound, totalRounds);
     byId('comparePatientStatusTile').textContent = getPatientStatusText(countTotal(activeCounts));
-    byId('compareScoreTile').textContent = `Round ${visibleRound} / ${totalRounds}`;
+    byId('compareScoreTile').textContent = `A ${state.patientARoundsCompleted}/${totalRounds} | B ${state.patientBRoundsCompleted}/${totalRounds}`;
     byId('compareAchievementTile').textContent = getArcadeFeedback('compare', state, activeCounts);
   }
 
@@ -558,17 +644,69 @@
     byId('extraAchievementTile').textContent = getArcadeFeedback('extra', state, counts);
   }
 
+  function getCompareVisibleRound(state) {
+    if (!state || state.phase === 'idle' || state.phase === 'transition_to_b') return 0;
+    if (state.phase === 'finished') return appState.config.compareRounds;
+    const activeKey = getCompareActivePatientKey(state);
+    if (activeKey === 'patientB') return Math.max(state.patientBRoundsCompleted, state.activeRound || 0);
+    return Math.max(state.patientARoundsCompleted, state.activeRound || 0);
+  }
+
+  function getCompareRoundPillText(state) {
+    const totalRounds = appState.config.compareRounds;
+    if (!state || state.phase === 'idle') return `Round 0 of ${totalRounds}`;
+    if (state.phase === 'transition_to_b') return 'Patient A Complete';
+    if (state.phase === 'finished') return 'Final Compare';
+    const activeKey = getCompareActivePatientKey(state);
+    const label = activeKey === 'patientB' ? 'Patient B' : 'Patient A';
+    return `${label} Round ${getCompareVisibleRound(state)} of ${totalRounds}`;
+  }
+
+  function getCompareActiveLabel(state, activeKey) {
+    if (!state || state.phase === 'idle') return 'Mission ready';
+    if (state.phase === 'transition_to_b') return 'Mission 2: Patient B';
+    if (state.phase === 'finished') return 'Final compare';
+    return activeKey === 'patientB' ? 'Mission 2: Patient B' : 'Mission 1: Patient A';
+  }
+
+  function isComparePatientBStage(phase) {
+    return phase === 'transition_to_b' || phase === 'b_roll' || phase === 'b_remove' || phase === 'b_missed' || phase === 'b_round_summary';
+  }
+
+  function isComparePatientAStage(phase) {
+    return phase === 'idle' || phase === 'a_remove' || phase === 'a_round_summary';
+  }
+
   function getCompareActivePatientKey(state) {
     if (!state) return 'patientA';
-    if (state.phase === 'b_roll' || state.phase === 'b_remove' || state.phase === 'b_missed') return 'patientB';
     if (state.working && state.working.patientKey) return state.working.patientKey;
-    if (state.phase === 'round_summary' && state.roundsCompleted > 0) return 'patientB';
+    if (isComparePatientBStage(state.phase)) return 'patientB';
+    if (isComparePatientAStage(state.phase)) return 'patientA';
+    if (state.patientARoundsCompleted >= appState.config.compareRounds) return 'patientB';
     return 'patientA';
   }
 
   function getArcadeDirective(mode, state, activeLabel) {
     if (!state) return { title: 'Mission Ready', sub: 'Start the simulation.' };
     const rollText = state.currentRoll ? `Roll ${state.currentRoll}. ` : '';
+    if (mode === 'compare') {
+      const totalRounds = appState.config.compareRounds;
+      if (state.phase === 'idle') return { title: 'Mission Ready', sub: `Run Patient A for ${totalRounds} rounds, then run Patient B.` };
+      if (state.phase === 'a_remove') {
+        const left = state.working ? state.working.removesLeft : 0;
+        return { title: `Remove ${left} Bacteria`, sub: `Mission 1: Patient A, Round ${state.activeRound} of ${totalRounds}. Red bacteria must be removed first.` };
+      }
+      if (state.phase === 'a_round_summary') return { title: 'Patient A Round Complete', sub: state.roundSummary || 'Continue Patient A before switching patients.' };
+      if (state.phase === 'transition_to_b') return { title: 'Patient A Complete', sub: 'Now start Patient B. Patient B rolls one die each round.' };
+      if (state.phase === 'b_roll') return { title: 'Roll for Patient B', sub: `Mission 2: Round ${state.activeRound} of ${totalRounds}. A roll of ${MISSED_DOSE_ROLLS.join(' or ')} means the dose was missed.` };
+      if (state.phase === 'b_remove') {
+        const left = state.working ? state.working.removesLeft : 0;
+        return { title: `Remove ${left} Bacteria`, sub: `${rollText}Patient B took the dose. Red bacteria must be removed first.` };
+      }
+      if (state.phase === 'b_missed') return { title: 'Missed Dose', sub: `${rollText}No bacteria are removed. Survivors reproduce.` };
+      if (state.phase === 'b_round_summary') return { title: 'Patient B Round Complete', sub: state.roundSummary || 'Continue Patient B.' };
+      if (state.phase === 'finished') return { title: 'Mission Debrief', sub: 'Compare both patients and answer the reflection.' };
+    }
     if (state.phase === 'idle') return { title: 'Mission Ready', sub: 'Start the antibiotic run.' };
     if (state.phase === 'a_remove' || state.phase === 'b_remove' || state.phase === 'extra_remove') {
       const left = state.working ? state.working.removesLeft : 0;
@@ -586,6 +724,12 @@
 
   function getArcadeFeedback(mode, state, counts) {
     if (!state) return 'Ready.';
+    if (mode === 'compare') {
+      if (state.phase === 'idle') return 'Start Patient A first.';
+      if (state.phase === 'transition_to_b') return 'Patient A complete. Start Patient B.';
+      if (state.phase === 'a_round_summary') return `Patient A ${state.patientARoundsCompleted}/${appState.config.compareRounds}.`;
+      if (state.phase === 'b_round_summary') return `Patient B ${state.patientBRoundsCompleted}/${appState.config.compareRounds}.`;
+    }
     if (state.phase === 'a_remove' || state.phase === 'b_remove' || state.phase === 'extra_remove') {
       if ((counts.red || 0) > 0) return 'Red first.';
       if ((counts.blue || 0) > 0) return 'Blue next.';
@@ -595,6 +739,35 @@
     if (state.phase === 'round_summary') return 'Round complete.';
     if (state.phase === 'finished') return 'Reflection ready.';
     return mode === 'compare' ? 'Compare both patients.' : 'Roll, treat, reflect.';
+  }
+
+  function getCompareRollWaitingText(state) {
+    if (!state) return 'Waiting for Patient B';
+    if (isComparePatientAStage(state.phase)) return 'Patient B starts after Patient A';
+    if (state.phase === 'transition_to_b') return 'Tap Start Patient B';
+    if (state.phase === 'b_round_summary') return 'Next Patient B round soon';
+    if (state.phase === 'finished') return 'Patient B complete';
+    return 'Waiting for Patient B';
+  }
+
+  function getCompareABadge(state) {
+    const totalRounds = appState.config.compareRounds;
+    if (!state || state.phase === 'idle') return { text: 'Ready', cls: 'dose-good' };
+    if (state.phase === 'finished') return { text: 'Mission complete', cls: 'dose-good' };
+    if (state.patientARoundsCompleted >= totalRounds && isComparePatientBStage(state.phase)) return { text: 'Mission complete', cls: 'dose-good' };
+    if (state.phase === 'a_round_summary') return { text: 'Round complete', cls: 'dose-good' };
+    return { text: 'Dose: taken', cls: 'dose-good' };
+  }
+
+  function getCompareBBadge(state) {
+    if (!state || state.phase === 'idle' || isComparePatientAStage(state.phase)) return { text: 'Locked', cls: 'dose-wait' };
+    if (state.phase === 'transition_to_b') return { text: 'Ready', cls: 'dose-wait' };
+    if (state.phase === 'b_roll') return { text: 'Roll needed', cls: 'dose-wait' };
+    if (state.phase === 'b_round_summary' || state.phase === 'finished') {
+      const missed = state.currentRoll && isMissedDose(state.currentRoll);
+      return { text: missed ? 'Dose missed' : 'Dose taken', cls: missed ? 'dose-miss' : 'dose-good' };
+    }
+    return { text: getDoseBadgeText(state.currentRoll, state.phase, true), cls: getDoseBadgeClass(state.currentRoll, state.phase, true) };
   }
 
   function updateRollReadout(cardId, dieId, badgeId, roll, phase, waitingText) {
@@ -781,17 +954,20 @@
   }
 
   function getCompareStepText(patientKey, state, counts) {
-    if (state.phase === 'idle') return 'Step 1: Click Start compare mode to begin Round 1.';
+    const totalRounds = appState.config.compareRounds;
+    if (state.phase === 'idle') return `Step 1: Start Patient A. You will finish all ${totalRounds} Patient A rounds before Patient B.`;
     if (patientKey === 'patientA') {
-      if (state.phase === 'a_remove') return `Step 1: Remove ${state.working.removesLeft} more bacteria. Start with red, then blue, then yellow.`;
-      if (state.phase === 'b_roll' || state.phase === 'b_remove' || state.phase === 'b_missed') return `Patient A finished this round with ${countTotal(counts)} total bacteria.`;
+      if (state.phase === 'a_remove') return `Mission 1, Round ${state.activeRound}: remove ${state.working.removesLeft} more bacteria. Start with red, then blue, then yellow.`;
+      if (state.phase === 'a_round_summary') return state.roundSummary;
+      if (isComparePatientBStage(state.phase)) return `Patient A mission complete: ${state.patientARoundsCompleted}/${totalRounds} rounds, ${countTotal(counts)} total bacteria.`;
     } else {
-      if (state.phase === 'a_remove') return 'Step 2: Wait until Patient A finishes treatment.';
-      if (state.phase === 'b_roll') return 'Step 2: Roll the die for Patient B.';
-      if (state.phase === 'b_remove') return `Step 2: Remove ${state.working.removesLeft} more bacteria from Patient B.`;
-      if (state.phase === 'b_missed') return 'Step 2: Dose missed. The remaining bacteria will reproduce.';
+      if (isComparePatientAStage(state.phase)) return `Locked until Patient A finishes all ${totalRounds} rounds.`;
+      if (state.phase === 'transition_to_b') return 'Ready for Mission 2: start Patient B Round 1.';
+      if (state.phase === 'b_roll') return `Mission 2, Round ${state.activeRound}: roll the die for Patient B.`;
+      if (state.phase === 'b_remove') return `Mission 2, Round ${state.activeRound}: remove ${state.working.removesLeft} more bacteria from Patient B.`;
+      if (state.phase === 'b_missed') return 'Dose missed. The remaining bacteria will reproduce.';
+      if (state.phase === 'b_round_summary') return state.roundSummary;
     }
-    if (state.phase === 'round_summary') return state.roundSummary;
     if (state.phase === 'finished') return state.summary ? 'Simulation finished. Use your own data in the reflection.' : 'Building reflection questions...';
     return `This patient currently has ${countTotal(counts)} total bacteria.`;
   }

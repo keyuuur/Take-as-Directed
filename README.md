@@ -16,6 +16,8 @@ Google Apps Script classroom game for modeling antibiotic adherence and bacteria
 
 - Shared gameplay constants live near the top of `Script.html`: color order, good-dose rolls, missed-dose rolls, removals per dose, and Patient A's automatic roll.
 - Compare mode and Extra mode both use the same treatment helpers where practical.
+- Compare mode is intentionally sequential: students finish all Patient A rounds first, then all Patient B rounds, then compare the final results.
+- Patient A and Patient B keep separate progress counters so the UI can say exactly which mission and round students are working on.
 - `startTreatmentPhase(...)` prepares a working copy of a patient's bacteria counts and decides whether removal is needed.
 - `finishTreatmentWithReproduction(...)` handles the post-treatment reproduction overlay and then commits the round.
 - `reproduceAndCommitRound(...)` applies reproduction, stores the new bacteria counts, and records the history row.
@@ -26,6 +28,7 @@ Google Apps Script classroom game for modeling antibiotic adherence and bacteria
 - Compare mode and Extra mode both run 8 rounds.
 - Patient A always represents consistent dosing.
 - Patient B / Extra mode roll one six-sided die.
+- Compare mode should not switch back and forth each round. Run Patient A rounds 1-8, then Patient B rounds 1-8.
 - Rolls `1` or `6` mean the dose was missed.
 - A taken dose removes up to 5 bacteria.
 - Bacteria must be removed in order: red, then blue, then yellow.
