@@ -17,11 +17,13 @@ Google Apps Script classroom game for modeling antibiotic adherence and bacteria
 - Shared gameplay constants live near the top of `Client_State.html`: color order, good-dose rolls, missed-dose rolls, removals per dose, and Patient A's automatic roll.
 - Compare mode and Extra mode both use the same treatment helpers where practical.
 - Compare mode is intentionally sequential: students finish all Patient A rounds first, then all Patient B rounds, then compare the final results.
+- Before Patient B starts, students must make a prediction about how missed doses will affect Patient B and choose a confidence level. This is saved for reflection and teacher analytics, but it is not graded.
 - Patient A and Patient B keep separate progress counters so the UI can say exactly which mission and round students are working on.
 - `startTreatmentPhase(...)` prepares a working copy of a patient's bacteria counts and decides whether removal is needed.
 - `finishTreatmentWithReproduction(...)` handles the post-treatment reproduction overlay and then commits the round.
 - `reproduceAndCommitRound(...)` applies reproduction, stores the new bacteria counts, and records the history row.
 - Rendering still happens through `renderCompareView()` and `renderExtraView()`, with smaller helpers updating action controls, roll readouts, cards, charts, and footer HUD.
+- If a patient's bacteria total reaches 0, the round auto-completes with a student-facing explanation instead of showing a reproduction overlay. The message explains that there is nothing left to remove or reproduce.
 
 ### Rules To Preserve
 
@@ -34,6 +36,15 @@ Google Apps Script classroom game for modeling antibiotic adherence and bacteria
 - Bacteria must be removed in order: red, then blue, then yellow.
 - After each dose phase, each surviving color reproduces by 1.
 - Do not change Sheet tab names, server function names, or submission payload shapes unless the Sheets contract is intentionally being updated.
+
+### Teacher Data Notes
+
+- The existing `Sessions`, `RoundData`, and `Responses` tabs are preserved. New expected headers are only appended to the right if needed; sheets are not cleared.
+- The first time the analytics upgrade runs, Apps Script creates one-time backup tabs for `Sessions`, `RoundData`, and `Responses`.
+- The backup marker is stored in the document property `takeAsDirected.analyticsBackupCreatedAt`, so those backup tabs are not recreated every time the app opens.
+- A new `Analytics` tab stores one summary row per Compare, Extra, or Emergency submission.
+- Compare analytics include the Patient B prediction, confidence level, final Patient A total, final Patient B total, the Patient B minus Patient A difference, Patient B yellow share, missed doses, score, and a short adherence outcome note.
+- Extra analytics leave prediction fields blank and store the extra-mode final total, missed doses, score, and adherence outcome note.
 
 ### Layout Notes
 
@@ -52,5 +63,8 @@ Before pushing to Apps Script:
 - Run syntax checks on `Code.js` and the concatenated client partials.
 - Run `clasp status` from this folder.
 - Test Compare mode taken-dose and missed-dose branches.
+- Test that Patient B stays locked until the student chooses both a prediction and confidence level.
+- Test that the final Compare debrief includes final totals, missed-dose count, the student prediction, the real-world adherence explanation, and the medical-professional disclaimer.
 - Test Extra mode taken-dose and missed-dose branches.
+- Confirm the new `Analytics` tab appears and backup tabs are created only once.
 - Confirm there is no horizontal overflow at iPad landscape size.

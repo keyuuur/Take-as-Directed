@@ -188,6 +188,15 @@ const CONFIG = {
   ]
 };
 
+const ANALYTICS_BACKUP_PROPERTY = 'takeAsDirected.analyticsBackupCreatedAt';
+const PREDICTION_CHOICE_OPTIONS = [
+  'Patient B will end with more bacteria.',
+  'Patient B will end with fewer bacteria.',
+  'Both patients will end about the same.',
+  'I am not sure yet.'
+];
+const PREDICTION_CONFIDENCE_OPTIONS = ['Not sure', 'Somewhat sure', 'Very sure'];
+
 function doGet() {
   initializeSheets_();
   const tpl = HtmlService.createTemplateFromFile('Index');
@@ -198,7 +207,12 @@ function doGet() {
 }
 
 function include(filename) {
-  return HtmlService.createTemplateFromFile(filename).evaluate().getContent();
+  // Script.html contains nested include calls, so it must be evaluated as a template.
+  // The Client_*.html files are raw JavaScript partials and should not be parsed as HTML.
+  if (filename === 'Script') {
+    return HtmlService.createTemplateFromFile(filename).evaluate().getContent();
+  }
+  return HtmlService.createTemplateFromFile(filename).getRawContent();
 }
 
 function getClientBootstrap() {
@@ -275,6 +289,7 @@ function saveModeSubmission_(mode, payload, isEmergency) {
   writeRoundRows_(modePayload.roundRows);
   writeResponseRows_(modePayload.responseRows);
   updateSessionRow_(sessionInfo.rowNumber, buildSessionUpdateMap_(mode, modePayload, isEmergency));
+  writeAnalyticsRow_(buildAnalyticsRow_(mode, modePayload, isEmergency));
 
   return {
     ok: true,
@@ -310,7 +325,8 @@ function normalizePayload_(mode, payload, sessionInfo) {
   const submittedAt = new Date();
   const history = normalizeHistory_(mode, Array.isArray(payload.history) ? payload.history : []);
   const responses = normalizeResponses_(mode, Array.isArray(payload.responses) ? payload.responses : []);
-  const summary = buildVerifiedSummary_(mode, history, responses);
+  const prediction = normalizePrediction_(mode, payload);
+  const summary = buildVerifiedSummary_(mode, history, responses, prediction);
 
   const roundRows = history.map(function(step) {
     return [
@@ -355,6 +371,7 @@ function normalizePayload_(mode, payload, sessionInfo) {
     submittedAt,
     history,
     responses,
+    prediction,
     roundRows,
     responseRows,
     summary
@@ -401,7 +418,30 @@ function normalizeResponses_(mode, responses) {
   });
 }
 
-function buildVerifiedSummary_(mode, history, responses) {
+function normalizePrediction_(mode, payload) {
+  if (mode !== 'compare') {
+    return {
+      choice: '',
+      confidence: '',
+      madeAfterPatientARounds: 0
+    };
+  }
+
+  const prediction = payload.prediction || {};
+  const summary = payload.summary || {};
+  return {
+    choice: normalizeOption_(prediction.choice || summary.predictionChoice, PREDICTION_CHOICE_OPTIONS),
+    confidence: normalizeOption_(prediction.confidence || summary.predictionConfidence, PREDICTION_CONFIDENCE_OPTIONS),
+    madeAfterPatientARounds: toNonNegativeNumber_(prediction.madeAfterPatientARounds || summary.predictionMadeAfterPatientARounds)
+  };
+}
+
+function normalizeOption_(value, allowed) {
+  const clean = String(value || '').trim();
+  return allowed.indexOf(clean) === -1 ? '' : clean;
+}
+
+function buildVerifiedSummary_(mode, history, responses, prediction) {
   const reflectionAnswered = responses.filter(function(r) { return !!r.selected; }).length;
   const reflectionCorrect = responses.filter(function(r) { return r.isCorrect; }).length;
   const reflectionScore = responses.reduce(function(sum, r) { return sum + (r.pointsEarned || 0); }, 0);
@@ -428,7 +468,10 @@ function buildVerifiedSummary_(mode, history, responses) {
       patientBFinalTotal: b.total,
       patientBMissedDoses: history.filter(function(step) {
         return step.patientType === 'patient_b' && step.round > 0 && isMissedRoll_(step.roll);
-      }).length
+      }).length,
+      predictionChoice: prediction.choice || '',
+      predictionConfidence: prediction.confidence || '',
+      predictionMadeAfterPatientARounds: prediction.madeAfterPatientARounds || 0
     };
   }
 
@@ -506,6 +549,57 @@ function writeResponseRows_(rows) {
   sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
+function writeAnalyticsRow_(row) {
+  const sheet = getSheet_('Analytics');
+  sheet.appendRow(buildRowForHeaders_(getHeaders_(sheet), row));
+}
+
+function buildAnalyticsRow_(mode, payload, isEmergency) {
+  const s = payload.summary || {};
+  const isCompare = mode === 'compare';
+  const patientBFinalTotal = isCompare ? toNonNegativeNumber_(s.patientBFinalTotal) : 0;
+  const patientAFinalTotal = isCompare ? toNonNegativeNumber_(s.patientAFinalTotal) : 0;
+  const patientBMinusA = isCompare ? patientBFinalTotal - patientAFinalTotal : '';
+  const patientBYellowShare = isCompare && patientBFinalTotal > 0
+    ? toNonNegativeNumber_(s.patientBFinalYellow) / patientBFinalTotal
+    : '';
+
+  return {
+    timestamp: payload.submittedAt,
+    sessionId: payload.sessionId,
+    studentName: payload.studentName,
+    period: payload.period,
+    mode,
+    status: isEmergency ? 'partial' : 'submitted',
+    completedRounds: s.completedRounds || 0,
+    totalScore: s.totalScore || 0,
+    reflectionAnswered: s.reflectionAnswered || 0,
+    reflectionCorrect: s.reflectionCorrect || 0,
+    missedDoses: isCompare ? (s.patientBMissedDoses || 0) : (s.missedDoses || 0),
+    predictionChoice: isCompare ? (s.predictionChoice || '') : '',
+    predictionConfidence: isCompare ? (s.predictionConfidence || '') : '',
+    patientAFinalTotal: isCompare ? patientAFinalTotal : '',
+    patientBFinalTotal: isCompare ? patientBFinalTotal : '',
+    patientBMinusA,
+    patientBYellowShare,
+    extraFinalTotal: isCompare ? '' : (s.finalTotal || 0),
+    adherenceOutcome: buildAdherenceOutcome_(mode, s)
+  };
+}
+
+function buildAdherenceOutcome_(mode, summary) {
+  if (mode === 'compare') {
+    const missed = summary.patientBMissedDoses || 0;
+    const difference = toNonNegativeNumber_(summary.patientBFinalTotal) - toNonNegativeNumber_(summary.patientAFinalTotal);
+    if (!missed) return 'Patient B did not miss a dose in this run.';
+    if (difference > 0) return 'Missed doses were linked with more remaining bacteria in this run.';
+    return 'This run included missed-dose opportunities; use the graph and survivor counts to explain the result.';
+  }
+
+  if ((summary.missedDoses || 0) > 0) return 'Missed doses gave surviving bacteria extra chances to reproduce.';
+  return 'No missed doses were recorded.';
+}
+
 function updateSessionRow_(rowNumber, updateMap) {
   const sheet = getSheet_('Sessions');
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -527,6 +621,8 @@ function initializeSheets_() {
     'timestamp', 'sessionId', 'studentName', 'period', 'mode', 'questionId', 'prompt', 'selected', 'correctAnswer',
     'isCorrect', 'pointsPossible', 'pointsEarned'
   ]);
+  ensureAnalyticsBackup_();
+  ensureSheet_('Analytics', analyticsHeaders_());
 }
 
 function ensureSheet_(name, headers) {
@@ -565,6 +661,65 @@ function sessionHeaders_() {
     'extraFinalRed', 'extraFinalBlue', 'extraFinalYellow', 'extraFinalTotal', 'extraMissedDoses',
     'lastModeVisited'
   ];
+}
+
+function analyticsHeaders_() {
+  return [
+    'timestamp',
+    'sessionId',
+    'studentName',
+    'period',
+    'mode',
+    'status',
+    'completedRounds',
+    'totalScore',
+    'reflectionAnswered',
+    'reflectionCorrect',
+    'missedDoses',
+    'predictionChoice',
+    'predictionConfidence',
+    'patientAFinalTotal',
+    'patientBFinalTotal',
+    'patientBMinusA',
+    'patientBYellowShare',
+    'extraFinalTotal',
+    'adherenceOutcome'
+  ];
+}
+
+function ensureAnalyticsBackup_() {
+  const props = PropertiesService.getDocumentProperties();
+  if (props.getProperty(ANALYTICS_BACKUP_PROPERTY)) return;
+
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    if (props.getProperty(ANALYTICS_BACKUP_PROPERTY)) return;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const timezone = ss.getSpreadsheetTimeZone() || 'America/Chicago';
+    const stamp = Utilities.formatDate(new Date(), timezone, 'yyyyMMdd_HHmmss');
+    ['Sessions', 'RoundData', 'Responses'].forEach(function(name) {
+      const source = ss.getSheetByName(name);
+      if (!source) return;
+      source.copyTo(ss).setName(uniqueSheetName_('Backup_' + name + '_' + stamp));
+    });
+    props.setProperty(ANALYTICS_BACKUP_PROPERTY, new Date().toISOString());
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function uniqueSheetName_(baseName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss.getSheetByName(baseName)) return baseName;
+
+  let suffix = 2;
+  let candidate = baseName + '_' + suffix;
+  while (ss.getSheetByName(candidate)) {
+    suffix += 1;
+    candidate = baseName + '_' + suffix;
+  }
+  return candidate;
 }
 
 function getSheet_(name) {

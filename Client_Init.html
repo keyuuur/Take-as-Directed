@@ -24,6 +24,12 @@ function initApp() {
 
     onClick('compareMainBtn', handleCompareMainButton);
     onClick('compareRollBtn', rollComparePatientB);
+    document.querySelectorAll('input[name="comparePredictionChoice"]').forEach(input => {
+      input.addEventListener('change', () => handleComparePredictionInput('choice', input.value));
+    });
+    document.querySelectorAll('input[name="comparePredictionConfidence"]').forEach(input => {
+      input.addEventListener('change', () => handleComparePredictionInput('confidence', input.value));
+    });
     document.querySelectorAll('#compareRemoveControls .remove-btn').forEach(btn => {
       btn.addEventListener('click', () => removeFromActive('compare', btn.dataset.color));
     });

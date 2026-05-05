@@ -9,6 +9,14 @@ function createCompareState() {
       phase: 'idle',
       currentRoll: null,
       roundSummary: '',
+      autoCompleteNote: '',
+      prediction: {
+        choice: '',
+        confidence: '',
+        madeAfterPatientARounds: 0,
+        locked: false,
+        error: ''
+      },
       patientA: makePatient('Patient A', 'patient_a', starting),
       patientB: makePatient('Patient B', 'patient_b', starting, generatePoorAdherenceRolls(appState.config.compareRounds)),
       working: null,
@@ -26,6 +34,7 @@ function createCompareState() {
       phase: 'idle',
       currentRoll: null,
       roundSummary: '',
+      autoCompleteNote: '',
       patient: makePatient('Your patient', 'random_patient', starting),
       working: null,
       missedDoses: 0,
@@ -55,9 +64,37 @@ function createCompareState() {
       beginComparePatientARound();
       return;
     }
-    if (state.phase === 'transition_to_b' || state.phase === 'b_round_summary') {
+    if (state.phase === 'transition_to_b') {
+      if (!lockComparePrediction()) {
+        renderCompareView();
+        return;
+      }
+      beginComparePatientBRound();
+      return;
+    }
+    if (state.phase === 'b_round_summary') {
       beginComparePatientBRound();
     }
+  }
+
+  function handleComparePredictionInput(field, value) {
+    const state = appState.compare;
+    if (!state || state.phase !== 'transition_to_b' || state.prediction.locked) return;
+    state.prediction[field] = value;
+    state.prediction.error = '';
+    renderCompareView();
+  }
+
+  function lockComparePrediction() {
+    const state = appState.compare;
+    if (!state || !isComparePredictionComplete(state)) {
+      if (state && state.prediction) state.prediction.error = 'Choose one prediction and one confidence level before starting Patient B.';
+      return false;
+    }
+    state.prediction.madeAfterPatientARounds = state.patientARoundsCompleted;
+    state.prediction.locked = true;
+    state.prediction.error = '';
+    return true;
   }
 
   function handleExtraMainButton() {
@@ -85,12 +122,14 @@ function createCompareState() {
     state.activeRound = state.patientARoundsCompleted + 1;
     state.currentRoll = null;
     state.roundSummary = '';
+    state.autoCompleteNote = '';
     state.patientA.flashAdded = [];
     const workingCounts = cloneCounts(state.patientA.counts);
     const removesLeft = Math.min(REMOVALS_PER_DOSE, countTotal(workingCounts));
     state.working = { mode: 'compare', patientKey: 'patientA', roll: PATIENT_A_AUTO_ROLL, workingCounts, removesLeft };
     state.phase = removesLeft > 0 ? 'a_remove' : 'a_round_summary';
     if (removesLeft === 0) {
+      state.autoCompleteNote = INFECTION_CLEARED_MESSAGE;
       commitPatientRound(state.patientA, state.activeRound, PATIENT_A_AUTO_ROLL, workingCounts, 'compare');
       state.working = null;
       finishComparePatientARound();
@@ -107,6 +146,7 @@ function createCompareState() {
     state.activeRound = state.patientBRoundsCompleted + 1;
     state.currentRoll = null;
     state.roundSummary = '';
+    state.autoCompleteNote = '';
     state.patientB.flashAdded = [];
     state.phase = 'b_roll';
     state.working = null;
@@ -119,6 +159,7 @@ function createCompareState() {
     state.activeRound = state.roundsCompleted + 1;
     state.currentRoll = null;
     state.roundSummary = '';
+    state.autoCompleteNote = '';
     state.patient.flashAdded = [];
     state.phase = 'extra_roll';
     state.working = null;
@@ -172,6 +213,7 @@ function createCompareState() {
     state.phase = removesLeft > 0 ? removePhase : 'round_summary';
     if (removesLeft > 0) return false;
 
+    state.autoCompleteNote = INFECTION_CLEARED_MESSAGE;
     commitPatientRound(patient, state.activeRound, roll, workingCounts, mode);
     state.working = null;
     finishRound();
@@ -233,6 +275,14 @@ function createCompareState() {
 
   function finishTreatmentWithReproduction({ state, patient, roll, mode, render, text, afterCommit }) {
     const sourceCounts = cloneCounts(state.working.workingCounts);
+    if (countTotal(sourceCounts) === 0) {
+      state.autoCompleteNote = INFECTION_CLEARED_MESSAGE;
+      patient.flashAdded = [];
+      commitPatientRound(patient, state.activeRound, roll, sourceCounts, mode);
+      state.working = null;
+      afterCommit();
+      return;
+    }
     render();
     openOverlay('REMAINING BACTERIA REPRODUCE!', text, () => {
       reproduceAndCommitRound(state, patient, roll, sourceCounts, mode);
@@ -253,16 +303,17 @@ function createCompareState() {
     if (!state) return;
     const totalRounds = appState.config.compareRounds;
     const latest = state.patientA.history[state.patientA.history.length - 1];
+    const clearedNote = latest.total === 0 ? state.autoCompleteNote : '';
     state.patientARoundsCompleted = Math.max(state.patientARoundsCompleted, state.activeRound);
     state.roundsCompleted = Math.min(state.patientARoundsCompleted, state.patientBRoundsCompleted);
-    state.roundSummary = `Patient A Round ${state.patientARoundsCompleted} complete. Patient A now has ${latest.total} total bacteria.`;
+    state.roundSummary = buildRoundSummaryWithClearedNote_(`Patient A Round ${state.patientARoundsCompleted} complete. Patient A now has ${latest.total} total bacteria.`, clearedNote);
     state.currentRoll = null;
     state.working = null;
     if (state.patientARoundsCompleted >= totalRounds) {
       state.activePatientKey = 'patientB';
       state.activeRound = 0;
       state.phase = 'transition_to_b';
-      state.roundSummary = `Patient A mission complete. Final Patient A total: ${latest.total}. Now run Patient B for ${totalRounds} rounds.`;
+      state.roundSummary = buildRoundSummaryWithClearedNote_(`Patient A mission complete. Final Patient A total: ${latest.total}. Now make a prediction before running Patient B for ${totalRounds} rounds.`, clearedNote);
     } else {
       state.activePatientKey = 'patientA';
       state.activeRound = state.patientARoundsCompleted;
@@ -276,9 +327,10 @@ function createCompareState() {
     if (!state) return;
     const totalRounds = appState.config.compareRounds;
     const latest = state.patientB.history[state.patientB.history.length - 1];
+    const clearedNote = latest.total === 0 ? state.autoCompleteNote : '';
     state.patientBRoundsCompleted = Math.max(state.patientBRoundsCompleted, state.activeRound);
     state.roundsCompleted = Math.min(state.patientARoundsCompleted, state.patientBRoundsCompleted);
-    state.roundSummary = `Patient B Round ${state.patientBRoundsCompleted} complete. Patient B now has ${latest.total} total bacteria.`;
+    state.roundSummary = buildRoundSummaryWithClearedNote_(`Patient B Round ${state.patientBRoundsCompleted} complete. Patient B now has ${latest.total} total bacteria.`, clearedNote);
     state.working = null;
     state.activePatientKey = 'patientB';
     if (state.patientBRoundsCompleted >= totalRounds) {
@@ -297,8 +349,13 @@ function createCompareState() {
     const state = appState.extra;
     const end = state.patient.history[state.patient.history.length - 1];
     state.roundsCompleted = state.activeRound;
-    state.roundSummary = `Round ${state.activeRound} complete. Your patient now has ${end.total} total bacteria.`;
+    const clearedNote = end.total === 0 ? state.autoCompleteNote : '';
+    state.roundSummary = buildRoundSummaryWithClearedNote_(`Round ${state.activeRound} complete. Your patient now has ${end.total} total bacteria.`, clearedNote);
     state.phase = state.roundsCompleted >= appState.config.extraRounds ? 'finished' : 'round_summary';
     if (state.phase === 'finished') buildExtraReflection();
     renderExtraView();
+  }
+
+  function buildRoundSummaryWithClearedNote_(summary, note) {
+    return note ? `${note} ${summary}` : summary;
   }

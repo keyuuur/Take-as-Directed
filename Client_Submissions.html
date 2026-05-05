@@ -38,16 +38,21 @@ function buildCompareReflection() {
     const state = appState.compare;
     const a = state.patientA.history[state.patientA.history.length - 1];
     const b = state.patientB.history[state.patientB.history.length - 1];
+    const prediction = cloneComparePrediction(state);
     return {
       compare: {
         patientATotalFinal: a.total,
         patientBTotalFinal: b.total,
         patientAYellowShareFinal: a.total ? a.yellow / a.total : 0,
         patientBYellowShareFinal: b.total ? b.yellow / b.total : 0,
-        patientBMissedDoses: state.patientB.missedDoses
+        patientBMissedDoses: state.patientB.missedDoses,
+        predictionChoice: prediction.choice,
+        predictionConfidence: prediction.confidence,
+        predictionMadeAfterPatientARounds: prediction.madeAfterPatientARounds
       },
       patientA: a,
-      patientB: b
+      patientB: b,
+      prediction
     };
   }
 
@@ -66,13 +71,67 @@ function buildCompareReflection() {
   function buildCompareSummaryHtml(summary) {
     const a = summary.compare.patientATotalFinal;
     const b = summary.compare.patientBTotalFinal;
-    const better = a < b ? 'Patient A finished with fewer bacteria.' : a > b ? 'Patient B finished with fewer bacteria.' : 'Both patients finished with the same total.';
+    const diff = b - a;
+    const prediction = getComparePredictionSummary(summary);
     return `
-      <h3>Compare-mode summary</h3>
-      <p><strong>${better}</strong></p>
-      <p>Patient B missed <strong>${summary.compare.patientBMissedDoses}</strong> dose(s).</p>
-      <p>Use the separate graphs above and your final counts to answer the reflection questions.</p>
+      <h3>Final compare debrief</h3>
+      <div class="summary-grid">
+        <div class="summary-stat"><span>Patient A final</span><strong>${a}</strong></div>
+        <div class="summary-stat"><span>Patient B final</span><strong>${b}</strong></div>
+        <div class="summary-stat"><span>B minus A</span><strong>${diff > 0 ? '+' : ''}${diff}</strong></div>
+        <div class="summary-stat"><span>B missed doses</span><strong>${summary.compare.patientBMissedDoses}</strong></div>
+      </div>
+      <p><strong>${escapeHtml(prediction.actual)}</strong> ${escapeHtml(prediction.matchText)}</p>
+      <p><strong>Your prediction:</strong> ${escapeHtml(prediction.choice)} <span class="muted-inline">Confidence: ${escapeHtml(prediction.confidence)}</span></p>
+      <div class="science-explain">
+        <strong>Real-world connection:</strong> missed or stopped doses can leave surviving bacteria more chances to reproduce, which can make infections harder to treat.
+      </div>
+      <div class="model-disclaimer">
+        This is a simplified classroom model. Real antibiotics should always be taken only as directed by a medical professional.
+      </div>
+      <p>Use your final counts, graphs, and prediction evidence to answer the reflection questions.</p>
     `;
+  }
+
+  function cloneComparePrediction(state) {
+    const prediction = state && state.prediction ? state.prediction : {};
+    return {
+      choice: prediction.choice || '',
+      confidence: prediction.confidence || '',
+      madeAfterPatientARounds: prediction.madeAfterPatientARounds || 0
+    };
+  }
+
+  function getComparePredictionSummary(summary) {
+    const choice = summary.compare.predictionChoice || (summary.prediction && summary.prediction.choice) || '';
+    const confidence = summary.compare.predictionConfidence || (summary.prediction && summary.prediction.confidence) || '';
+    const a = summary.compare.patientATotalFinal;
+    const b = summary.compare.patientBTotalFinal;
+    const diff = b - a;
+    const actual = diff > 0
+      ? 'Patient B ended with more bacteria.'
+      : diff < 0
+        ? 'Patient B ended with fewer bacteria.'
+        : 'Both patients ended about the same.';
+
+    let matchText = 'Compare your prediction to the evidence from this run.';
+    if (choice === 'I am not sure yet.') {
+      matchText = 'You were still deciding, so use this run as evidence for a stronger explanation.';
+    } else if (choice) {
+      const matched = (diff > 0 && choice === 'Patient B will end with more bacteria.')
+        || (diff < 0 && choice === 'Patient B will end with fewer bacteria.')
+        || (diff === 0 && choice === 'Both patients will end about the same.');
+      matchText = matched
+        ? 'Your prediction matched this run.'
+        : 'Your prediction did not match this run, which is useful evidence to explain.';
+    }
+
+    return {
+      actual,
+      matchText,
+      choice: choice || 'No prediction recorded.',
+      confidence: confidence || 'Not recorded'
+    };
   }
 
   function buildExtraSummaryHtml(summary) {
@@ -108,12 +167,14 @@ function buildCompareReflection() {
     if (!allQuestionsAnswered(state.reflection)) return alert('Please answer all compare-mode reflection questions before submitting.');
     const responses = collectResponses(state.reflection, appState.config.comparePoints.reflection);
     const reflectionScore = sumScores(responses);
+    const prediction = cloneComparePrediction(state);
     const payload = {
       sessionId: appState.sessionId,
       studentName: appState.studentName,
       period: appState.period,
       history: [...state.patientA.history, ...state.patientB.history],
       responses,
+      prediction,
       summary: {
         completedRounds: state.roundsCompleted,
         reflectionAnswered: responses.filter(r => r.selected).length,
@@ -129,7 +190,10 @@ function buildCompareReflection() {
         patientBFinalBlue: state.patientB.counts.blue,
         patientBFinalYellow: state.patientB.counts.yellow,
         patientBFinalTotal: countTotal(state.patientB.counts),
-        patientBMissedDoses: state.patientB.missedDoses
+        patientBMissedDoses: state.patientB.missedDoses,
+        predictionChoice: prediction.choice,
+        predictionConfidence: prediction.confidence,
+        predictionMadeAfterPatientARounds: prediction.madeAfterPatientARounds
       }
     };
     setBusy(true);
@@ -188,6 +252,7 @@ function buildCompareReflection() {
     const reflection = state.reflection || [];
     const responses = collectResponses(reflection, points.reflection);
     const reflectionScore = sumScores(responses);
+    const prediction = isCompare ? cloneComparePrediction(state) : null;
     const payload = {
       mode,
       sessionId: appState.sessionId,
@@ -195,6 +260,7 @@ function buildCompareReflection() {
       period: appState.period,
       history: isCompare ? [...(state.patientA ? state.patientA.history : []), ...(state.patientB ? state.patientB.history : [])] : (state.patient ? state.patient.history : []),
       responses,
+      prediction,
       summary: isCompare ? {
         completedRounds: state.roundsCompleted || 0,
         reflectionAnswered: responses.filter(r => r.selected).length,
@@ -210,7 +276,10 @@ function buildCompareReflection() {
         patientBFinalBlue: state.patientB ? state.patientB.counts.blue : 0,
         patientBFinalYellow: state.patientB ? state.patientB.counts.yellow : 0,
         patientBFinalTotal: state.patientB ? countTotal(state.patientB.counts) : 0,
-        patientBMissedDoses: state.patientB ? state.patientB.missedDoses : 0
+        patientBMissedDoses: state.patientB ? state.patientB.missedDoses : 0,
+        predictionChoice: prediction ? prediction.choice : '',
+        predictionConfidence: prediction ? prediction.confidence : '',
+        predictionMadeAfterPatientARounds: prediction ? prediction.madeAfterPatientARounds : 0
       } : {
         completedRounds: state.roundsCompleted || 0,
         reflectionAnswered: responses.filter(r => r.selected).length,

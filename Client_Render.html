@@ -74,6 +74,7 @@ function renderCompareView() {
     const working = state.working;
     resetActionControls('compare');
     setText('compareRemoveInfo', '');
+    byId('compareMainBtn').disabled = false;
 
     let title = 'Your action';
     let text = '';
@@ -95,9 +96,11 @@ function renderCompareView() {
       setHidden('compareMainBtn', false);
     } else if (state.phase === 'transition_to_b') {
       title = 'Patient B mission ready';
-      text = `Patient A is fully complete. Now run Patient B for all ${appState.config.compareRounds} rounds. Patient B rolls one die each round.`;
-      setText('compareMainBtn', 'Start Patient B Mission');
+      text = `Patient A is fully complete. Make a prediction, then run Patient B for all ${appState.config.compareRounds} rounds. Patient B rolls one die each round.`;
+      setHidden('comparePredictionWrap', false);
+      setText('compareMainBtn', 'Lock Prediction & Start Patient B');
       setHidden('compareMainBtn', false);
+      byId('compareMainBtn').disabled = !isComparePredictionComplete(state);
     } else if (state.phase === 'b_roll') {
       title = `Patient B: Round ${state.activeRound}`;
       text = 'Roll one die for Patient B. A 1 or 6 means the dose was missed.';
@@ -125,6 +128,7 @@ function renderCompareView() {
     setText('compareActionTitle', title);
     setText('compareInstruction', text);
     setText('compareActionText', text);
+    updateComparePredictionUi(state);
     updateRemoveButtons('compare');
   }
 
@@ -261,7 +265,7 @@ function renderCompareView() {
         return { title: `Remove ${left} Bacteria`, sub: `Mission 1: Patient A, Round ${state.activeRound} of ${totalRounds}. Red bacteria must be removed first.` };
       }
       if (state.phase === 'a_round_summary') return { title: 'Patient A Round Complete', sub: state.roundSummary || 'Continue Patient A before switching patients.' };
-      if (state.phase === 'transition_to_b') return { title: 'Patient A Complete', sub: 'Now start Patient B. Patient B rolls one die each round.' };
+      if (state.phase === 'transition_to_b') return { title: 'Make a Prediction', sub: 'Predict how missed doses will change Patient B before you start Mission 2.' };
       if (state.phase === 'b_roll') return { title: 'Roll for Patient B', sub: `Mission 2: Round ${state.activeRound} of ${totalRounds}. A roll of ${MISSED_DOSE_ROLLS.join(' or ')} means the dose was missed.` };
       if (state.phase === 'b_remove') {
         const left = state.working ? state.working.removesLeft : 0;
@@ -290,7 +294,7 @@ function renderCompareView() {
     if (!state) return 'Ready.';
     if (mode === 'compare') {
       if (state.phase === 'idle') return 'Start Patient A first.';
-      if (state.phase === 'transition_to_b') return 'Patient A complete. Start Patient B.';
+      if (state.phase === 'transition_to_b') return 'Make your prediction first.';
       if (state.phase === 'a_round_summary') return `Patient A ${state.patientARoundsCompleted}/${appState.config.compareRounds}.`;
       if (state.phase === 'b_round_summary') return `Patient B ${state.patientBRoundsCompleted}/${appState.config.compareRounds}.`;
     }
@@ -308,7 +312,7 @@ function renderCompareView() {
   function getCompareRollWaitingText(state) {
     if (!state) return 'Waiting for Patient B';
     if (isComparePatientAStage(state.phase)) return 'Patient B starts after Patient A';
-    if (state.phase === 'transition_to_b') return 'Tap Start Patient B';
+    if (state.phase === 'transition_to_b') return 'Prediction first';
     if (state.phase === 'b_round_summary') return 'Next Patient B round soon';
     if (state.phase === 'finished') return 'Patient B complete';
     return 'Waiting for Patient B';
@@ -332,6 +336,26 @@ function renderCompareView() {
       return { text: missed ? 'Dose missed' : 'Dose taken', cls: missed ? 'dose-miss' : 'dose-good' };
     }
     return { text: getDoseBadgeText(state.currentRoll, state.phase, true), cls: getDoseBadgeClass(state.currentRoll, state.phase, true) };
+  }
+
+  function updateComparePredictionUi(state) {
+    if (!state || !state.prediction) return;
+    document.querySelectorAll('input[name="comparePredictionChoice"]').forEach(input => {
+      input.checked = input.value === state.prediction.choice;
+      input.disabled = state.prediction.locked;
+    });
+    document.querySelectorAll('input[name="comparePredictionConfidence"]').forEach(input => {
+      input.checked = input.value === state.prediction.confidence;
+      input.disabled = state.prediction.locked;
+    });
+
+    const complete = isComparePredictionComplete(state);
+    const feedback = state.prediction.error
+      || (complete
+        ? 'Prediction ready. Lock it in to start Patient B.'
+        : 'Choose one prediction and one confidence level.');
+    setText('comparePredictionFeedback', feedback);
+    byId('comparePredictionFeedback').classList.toggle('prediction-ready', complete);
   }
 
   function updateRollReadout(cardId, dieId, badgeId, roll, phase, waitingText) {
@@ -526,7 +550,7 @@ function renderCompareView() {
       if (isComparePatientBStage(state.phase)) return `Patient A mission complete: ${state.patientARoundsCompleted}/${totalRounds} rounds, ${countTotal(counts)} total bacteria.`;
     } else {
       if (isComparePatientAStage(state.phase)) return `Locked until Patient A finishes all ${totalRounds} rounds.`;
-      if (state.phase === 'transition_to_b') return 'Ready for Mission 2: start Patient B Round 1.';
+      if (state.phase === 'transition_to_b') return 'Ready for Mission 2: make a prediction before starting Patient B Round 1.';
       if (state.phase === 'b_roll') return `Mission 2, Round ${state.activeRound}: roll the die for Patient B.`;
       if (state.phase === 'b_remove') return `Mission 2, Round ${state.activeRound}: remove ${state.working.removesLeft} more bacteria from Patient B.`;
       if (state.phase === 'b_missed') return 'Dose missed. The remaining bacteria will reproduce.';

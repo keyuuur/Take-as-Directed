@@ -174,6 +174,37 @@
           </main>
 
           <section class="action-bar">
+            <div id="comparePredictionWrap" class="prediction-card hidden" aria-live="polite">
+              <div class="prediction-copy">
+                <h3>Before treating Patient B, predict what missed doses will do.</h3>
+                <p>Patient A is finished. Make a science prediction, then run Patient B and compare your evidence.</p>
+              </div>
+              <div class="prediction-options" role="radiogroup" aria-label="Prediction for Patient B">
+                <label class="prediction-choice">
+                  <input type="radio" name="comparePredictionChoice" value="Patient B will end with more bacteria.">
+                  <span>Patient B will end with more bacteria.</span>
+                </label>
+                <label class="prediction-choice">
+                  <input type="radio" name="comparePredictionChoice" value="Patient B will end with fewer bacteria.">
+                  <span>Patient B will end with fewer bacteria.</span>
+                </label>
+                <label class="prediction-choice">
+                  <input type="radio" name="comparePredictionChoice" value="Both patients will end about the same.">
+                  <span>Both patients will end about the same.</span>
+                </label>
+                <label class="prediction-choice">
+                  <input type="radio" name="comparePredictionChoice" value="I am not sure yet.">
+                  <span>I am not sure yet.</span>
+                </label>
+              </div>
+              <div class="prediction-confidence" role="radiogroup" aria-label="Prediction confidence">
+                <span>Confidence:</span>
+                <label><input type="radio" name="comparePredictionConfidence" value="Not sure"> Not sure</label>
+                <label><input type="radio" name="comparePredictionConfidence" value="Somewhat sure"> Somewhat sure</label>
+                <label><input type="radio" name="comparePredictionConfidence" value="Very sure"> Very sure</label>
+              </div>
+              <p id="comparePredictionFeedback" class="prediction-feedback">Choose one prediction and one confidence level.</p>
+            </div>
             <button id="compareMainBtn" class="btn btn-start hidden">Start Compare Mode</button>
             <button id="compareRollBtn" class="btn btn-roll hidden">Roll for Patient B</button>
             <div id="compareRemoveControls" class="remove-controls hidden">

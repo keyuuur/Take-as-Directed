@@ -19,6 +19,14 @@ google.charts.load('current', { packages: ['corechart'] });
   const MISSED_DOSE_ROLLS = [1, 6];
   const REMOVALS_PER_DOSE = 5;
   const PATIENT_A_AUTO_ROLL = 4;
+  const INFECTION_CLEARED_MESSAGE = 'No bacteria are left in this patient, so this round auto-completed. In this model, the infection is cleared, so there is nothing left for the antibiotic to remove or for bacteria to reproduce.';
+  const PREDICTION_CHOICES = [
+    'Patient B will end with more bacteria.',
+    'Patient B will end with fewer bacteria.',
+    'Both patients will end about the same.',
+    'I am not sure yet.'
+  ];
+  const PREDICTION_CONFIDENCE_CHOICES = ['Not sure', 'Somewhat sure', 'Very sure'];
 
   const LEFT_LUNG_SLOTS = [
     [176, 148], [153, 170], [195, 171], [140, 196], [176, 196], [209, 196], [154, 223], [191, 224],

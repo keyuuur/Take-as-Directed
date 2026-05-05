@@ -152,14 +152,27 @@ function runCompare() {
   renderCompareView();
   assert(document.getElementById('compareBHeaderBadge').textContent === 'Locked', 'Patient B should be locked before Patient A finishes');
   handleCompareMainButton();
+  let sawClearedMessage = false;
   for (let round = 1; round <= appState.config.compareRounds; round++) {
     if (appState.compare.phase === 'a_remove') finishTreatment('compare');
+    if ((appState.compare.roundSummary || '').includes('No bacteria are left in this patient')) sawClearedMessage = true;
     assert(appState.compare.patientARoundsCompleted === round, 'Patient A round mismatch');
     assert(appState.compare.patientBRoundsCompleted === 0, 'Patient B advanced too early');
     if (round < appState.config.compareRounds) handleCompareMainButton();
   }
+  assert(sawClearedMessage, 'Compare should explain when a cleared infection auto-completes');
   assert(appState.compare.phase === 'transition_to_b', 'Compare should transition to Patient B');
+  assert(document.getElementById('compareMainBtn').disabled === true, 'Patient B start button should wait for prediction');
   handleCompareMainButton();
+  assert(appState.compare.phase === 'transition_to_b', 'Patient B should not start without a prediction');
+  assert(appState.compare.prediction.error, 'Missing prediction should show feedback');
+  handleComparePredictionInput('choice', 'Patient B will end with more bacteria.');
+  assert(document.getElementById('compareMainBtn').disabled === true, 'Prediction also needs confidence');
+  handleComparePredictionInput('confidence', 'Somewhat sure');
+  assert(document.getElementById('compareMainBtn').disabled === false, 'Complete prediction should enable Patient B start');
+  handleCompareMainButton();
+  assert(appState.compare.prediction.locked, 'Prediction should lock before Patient B starts');
+  assert(appState.compare.prediction.madeAfterPatientARounds === 8, 'Prediction should record that it happened after Patient A finished');
   for (let round = 1; round <= appState.config.compareRounds; round++) {
     assert(appState.compare.phase === 'b_roll', 'Patient B should start each round by rolling');
     rollComparePatientB();
@@ -169,9 +182,14 @@ function runCompare() {
     if (round < appState.config.compareRounds) handleCompareMainButton();
   }
   assert(appState.compare.phase === 'finished', 'Compare should finish after both missions');
+  assert(document.getElementById('compareSummary').innerHTML.includes('Real-world connection'), 'Final summary should include real-world connection');
+  assert(document.getElementById('compareSummary').innerHTML.includes('simplified classroom model'), 'Final summary should include medical disclaimer');
   appState.compare.reflection[0].selected = 'Patient A';
   submitCompareMode();
   assert(google.script.run.savedComparePayload.history.length === 18, 'Compare should submit 18 history rows');
+  assert(google.script.run.savedComparePayload.prediction.choice === 'Patient B will end with more bacteria.', 'Compare payload should include prediction choice');
+  assert(google.script.run.savedComparePayload.prediction.confidence === 'Somewhat sure', 'Compare payload should include prediction confidence');
+  assert(google.script.run.savedComparePayload.summary.predictionMadeAfterPatientARounds === 8, 'Compare summary should include prediction timing');
 }
 function runExtra() {
   const randomValues = [0.5, 0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];

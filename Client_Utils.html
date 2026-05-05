@@ -73,6 +73,10 @@ function commitPatientRound(patient, round, roll, counts, mode) {
     return questions.every(q => !!q.selected);
   }
 
+  function isComparePredictionComplete(state) {
+    return !!(state && state.prediction && state.prediction.choice && state.prediction.confidence);
+  }
+
   function sumScores(responses) {
     return responses.reduce((sum, r) => sum + (r.pointsEarned || 0), 0);
   }
@@ -187,7 +191,7 @@ function commitPatientRound(patient, round, roll, counts, mode) {
 
   function resetActionControls(mode) {
     const ids = mode === 'compare'
-      ? ['compareMainBtn', 'compareRollBtn', 'compareRemoveControls']
+      ? ['compareMainBtn', 'compareRollBtn', 'compareRemoveControls', 'comparePredictionWrap']
       : ['extraMainBtn', 'extraRollBtn', 'extraRemoveControls'];
     ids.forEach(id => setHidden(id, true));
   }
