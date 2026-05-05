@@ -24,6 +24,7 @@ Google Apps Script classroom game for modeling antibiotic adherence and bacteria
 - `reproduceAndCommitRound(...)` applies reproduction, stores the new bacteria counts, and records the history row.
 - Rendering still happens through `renderCompareView()` and `renderExtraView()`, with smaller helpers updating action controls, roll readouts, cards, charts, and footer HUD.
 - If a patient's bacteria total reaches 0, the round auto-completes with a student-facing explanation instead of showing a reproduction overlay. The message explains that there is nothing left to remove or reproduce.
+- Submission payloads are built through shared helpers in `Client_Submissions.html` so normal submit and emergency submit use the same summary logic.
 
 ### Rules To Preserve
 
@@ -60,6 +61,7 @@ Before pushing to Apps Script:
 - Confirm all `byId(...)` references still match IDs in `Index.html`.
 - Confirm there are no duplicate IDs.
 - Run `powershell -ExecutionPolicy Bypass -File .\tools\run-client-flow-check.ps1`.
+- Run `powershell -ExecutionPolicy Bypass -File .\tools\run-server-check.ps1`.
 - Run syntax checks on `Code.js` and the concatenated client partials.
 - Run `clasp status` from this folder.
 - Test Compare mode taken-dose and missed-dose branches.

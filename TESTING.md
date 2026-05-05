@@ -8,9 +8,10 @@ Run from `C:\Users\Keyur\Desktop\Take-as-Directed LOCAL`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\run-client-flow-check.ps1
+powershell -ExecutionPolicy Bypass -File .\tools\run-server-check.ps1
 ```
 
-This verifies:
+The client-flow check verifies:
 
 - Compare Mode keeps Patient B locked until Patient A finishes all 8 rounds.
 - Patient B remains locked until the student chooses both a prediction and confidence level.
@@ -20,7 +21,15 @@ This verifies:
 - The final Compare debrief includes the student prediction, final totals, real-world adherence explanation, and simplified-model disclaimer.
 - Extra Mode can complete all 8 rounds with both missed-dose and taken-dose branches.
 - Compare and Extra submissions still produce the expected history rows.
+- Compare and Extra emergency submissions still build safe partial payloads.
 - The page has no duplicate DOM IDs.
+
+The server check verifies:
+
+- The server recomputes completed rounds, scores, missed doses, and analytics values from history instead of trusting browser summary values.
+- Invalid prediction choices and confidence values are rejected.
+- Compare analytics include prediction data.
+- Extra analytics leave prediction fields blank.
 
 Also run:
 

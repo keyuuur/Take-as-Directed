@@ -142,6 +142,96 @@ function buildCompareReflection() {
     `;
   }
 
+  function buildCompareSubmissionPayload(state, responses, reflectionScore) {
+    return {
+      sessionId: appState.sessionId,
+      studentName: appState.studentName,
+      period: appState.period,
+      history: buildCompareHistory(state),
+      responses,
+      prediction: cloneComparePrediction(state),
+      summary: buildCompareSubmissionSummary(state, responses, reflectionScore)
+    };
+  }
+
+  function buildExtraSubmissionPayload(state, responses, reflectionScore) {
+    return {
+      sessionId: appState.sessionId,
+      studentName: appState.studentName,
+      period: appState.period,
+      history: buildExtraHistory(state),
+      responses,
+      summary: buildExtraSubmissionSummary(state, responses, reflectionScore)
+    };
+  }
+
+  function buildCompareSubmissionSummary(state, responses, reflectionScore) {
+    const completedRounds = state.roundsCompleted || 0;
+    const completionScore = completedRounds === appState.config.compareRounds ? appState.config.comparePoints.completion : 0;
+    const patientA = state.patientA ? state.patientA.counts : emptyClientCounts();
+    const patientB = state.patientB ? state.patientB.counts : emptyClientCounts();
+    const prediction = cloneComparePrediction(state);
+    return {
+      completedRounds,
+      reflectionAnswered: countAnsweredResponses(responses),
+      reflectionCorrect: countCorrectResponses(responses),
+      completionScore,
+      reflectionScore,
+      totalScore: completionScore + reflectionScore,
+      patientAFinalRed: patientA.red,
+      patientAFinalBlue: patientA.blue,
+      patientAFinalYellow: patientA.yellow,
+      patientAFinalTotal: countTotal(patientA),
+      patientBFinalRed: patientB.red,
+      patientBFinalBlue: patientB.blue,
+      patientBFinalYellow: patientB.yellow,
+      patientBFinalTotal: countTotal(patientB),
+      patientBMissedDoses: state.patientB ? state.patientB.missedDoses : 0,
+      predictionChoice: prediction.choice,
+      predictionConfidence: prediction.confidence,
+      predictionMadeAfterPatientARounds: prediction.madeAfterPatientARounds
+    };
+  }
+
+  function buildExtraSubmissionSummary(state, responses, reflectionScore) {
+    const completedRounds = state.roundsCompleted || 0;
+    const completionScore = completedRounds === appState.config.extraRounds ? appState.config.extraPoints.completion : 0;
+    const patient = state.patient ? state.patient.counts : emptyClientCounts();
+    return {
+      completedRounds,
+      reflectionAnswered: countAnsweredResponses(responses),
+      reflectionCorrect: countCorrectResponses(responses),
+      completionScore,
+      reflectionScore,
+      totalScore: completionScore + reflectionScore,
+      finalRed: patient.red,
+      finalBlue: patient.blue,
+      finalYellow: patient.yellow,
+      finalTotal: countTotal(patient),
+      missedDoses: state.missedDoses || 0
+    };
+  }
+
+  function buildCompareHistory(state) {
+    return [...(state.patientA ? state.patientA.history : []), ...(state.patientB ? state.patientB.history : [])];
+  }
+
+  function buildExtraHistory(state) {
+    return state.patient ? state.patient.history : [];
+  }
+
+  function countAnsweredResponses(responses) {
+    return responses.filter(r => r.selected).length;
+  }
+
+  function countCorrectResponses(responses) {
+    return responses.filter(r => r.isCorrect).length;
+  }
+
+  function emptyClientCounts() {
+    return { red: 0, blue: 0, yellow: 0 };
+  }
+
   function renderQuestions(containerId, questions, mode) {
     byId(containerId).innerHTML = questions.map((q, idx) => `
       <fieldset class="question-card">
@@ -167,35 +257,7 @@ function buildCompareReflection() {
     if (!allQuestionsAnswered(state.reflection)) return alert('Please answer all compare-mode reflection questions before submitting.');
     const responses = collectResponses(state.reflection, appState.config.comparePoints.reflection);
     const reflectionScore = sumScores(responses);
-    const prediction = cloneComparePrediction(state);
-    const payload = {
-      sessionId: appState.sessionId,
-      studentName: appState.studentName,
-      period: appState.period,
-      history: [...state.patientA.history, ...state.patientB.history],
-      responses,
-      prediction,
-      summary: {
-        completedRounds: state.roundsCompleted,
-        reflectionAnswered: responses.filter(r => r.selected).length,
-        reflectionCorrect: responses.filter(r => r.isCorrect).length,
-        completionScore: state.roundsCompleted === appState.config.compareRounds ? appState.config.comparePoints.completion : 0,
-        reflectionScore,
-        totalScore: (state.roundsCompleted === appState.config.compareRounds ? appState.config.comparePoints.completion : 0) + reflectionScore,
-        patientAFinalRed: state.patientA.counts.red,
-        patientAFinalBlue: state.patientA.counts.blue,
-        patientAFinalYellow: state.patientA.counts.yellow,
-        patientAFinalTotal: countTotal(state.patientA.counts),
-        patientBFinalRed: state.patientB.counts.red,
-        patientBFinalBlue: state.patientB.counts.blue,
-        patientBFinalYellow: state.patientB.counts.yellow,
-        patientBFinalTotal: countTotal(state.patientB.counts),
-        patientBMissedDoses: state.patientB.missedDoses,
-        predictionChoice: prediction.choice,
-        predictionConfidence: prediction.confidence,
-        predictionMadeAfterPatientARounds: prediction.madeAfterPatientARounds
-      }
-    };
+    const payload = buildCompareSubmissionPayload(state, responses, reflectionScore);
     setBusy(true);
     google.script.run
       .withSuccessHandler(() => {
@@ -213,26 +275,7 @@ function buildCompareReflection() {
     if (!allQuestionsAnswered(state.reflection)) return alert('Please answer all extra-credit reflection questions before submitting.');
     const responses = collectResponses(state.reflection, appState.config.extraPoints.reflection);
     const reflectionScore = sumScores(responses);
-    const payload = {
-      sessionId: appState.sessionId,
-      studentName: appState.studentName,
-      period: appState.period,
-      history: state.patient.history,
-      responses,
-      summary: {
-        completedRounds: state.roundsCompleted,
-        reflectionAnswered: responses.filter(r => r.selected).length,
-        reflectionCorrect: responses.filter(r => r.isCorrect).length,
-        completionScore: state.roundsCompleted === appState.config.extraRounds ? appState.config.extraPoints.completion : 0,
-        reflectionScore,
-        totalScore: (state.roundsCompleted === appState.config.extraRounds ? appState.config.extraPoints.completion : 0) + reflectionScore,
-        finalRed: state.patient.counts.red,
-        finalBlue: state.patient.counts.blue,
-        finalYellow: state.patient.counts.yellow,
-        finalTotal: countTotal(state.patient.counts),
-        missedDoses: state.missedDoses
-      }
-    };
+    const payload = buildExtraSubmissionPayload(state, responses, reflectionScore);
     setBusy(true);
     google.script.run
       .withSuccessHandler(() => {
@@ -252,48 +295,10 @@ function buildCompareReflection() {
     const reflection = state.reflection || [];
     const responses = collectResponses(reflection, points.reflection);
     const reflectionScore = sumScores(responses);
-    const prediction = isCompare ? cloneComparePrediction(state) : null;
-    const payload = {
-      mode,
-      sessionId: appState.sessionId,
-      studentName: appState.studentName,
-      period: appState.period,
-      history: isCompare ? [...(state.patientA ? state.patientA.history : []), ...(state.patientB ? state.patientB.history : [])] : (state.patient ? state.patient.history : []),
-      responses,
-      prediction,
-      summary: isCompare ? {
-        completedRounds: state.roundsCompleted || 0,
-        reflectionAnswered: responses.filter(r => r.selected).length,
-        reflectionCorrect: responses.filter(r => r.isCorrect).length,
-        completionScore: (state.roundsCompleted === appState.config.compareRounds) ? appState.config.comparePoints.completion : 0,
-        reflectionScore,
-        totalScore: ((state.roundsCompleted === appState.config.compareRounds) ? appState.config.comparePoints.completion : 0) + reflectionScore,
-        patientAFinalRed: state.patientA ? state.patientA.counts.red : 0,
-        patientAFinalBlue: state.patientA ? state.patientA.counts.blue : 0,
-        patientAFinalYellow: state.patientA ? state.patientA.counts.yellow : 0,
-        patientAFinalTotal: state.patientA ? countTotal(state.patientA.counts) : 0,
-        patientBFinalRed: state.patientB ? state.patientB.counts.red : 0,
-        patientBFinalBlue: state.patientB ? state.patientB.counts.blue : 0,
-        patientBFinalYellow: state.patientB ? state.patientB.counts.yellow : 0,
-        patientBFinalTotal: state.patientB ? countTotal(state.patientB.counts) : 0,
-        patientBMissedDoses: state.patientB ? state.patientB.missedDoses : 0,
-        predictionChoice: prediction ? prediction.choice : '',
-        predictionConfidence: prediction ? prediction.confidence : '',
-        predictionMadeAfterPatientARounds: prediction ? prediction.madeAfterPatientARounds : 0
-      } : {
-        completedRounds: state.roundsCompleted || 0,
-        reflectionAnswered: responses.filter(r => r.selected).length,
-        reflectionCorrect: responses.filter(r => r.isCorrect).length,
-        completionScore: (state.roundsCompleted === appState.config.extraRounds) ? appState.config.extraPoints.completion : 0,
-        reflectionScore,
-        totalScore: ((state.roundsCompleted === appState.config.extraRounds) ? appState.config.extraPoints.completion : 0) + reflectionScore,
-        finalRed: state.patient ? state.patient.counts.red : 0,
-        finalBlue: state.patient ? state.patient.counts.blue : 0,
-        finalYellow: state.patient ? state.patient.counts.yellow : 0,
-        finalTotal: state.patient ? countTotal(state.patient.counts) : 0,
-        missedDoses: state.missedDoses || 0
-      }
-    };
+    const payload = isCompare
+      ? buildCompareSubmissionPayload(state, responses, reflectionScore)
+      : buildExtraSubmissionPayload(state, responses, reflectionScore);
+    payload.mode = mode;
     setBusy(true);
     google.script.run
       .withSuccessHandler(() => {

@@ -126,6 +126,7 @@ context.google = { charts: { load() {}, setOnLoadCallback() {} }, visualization:
 
 const test = `
 function assert(condition, message) { if (!condition) throw new Error(message); }
+const defaultRandom = Math.random;
 function chooseRemovalColor(mode) {
   const state = mode === 'compare' ? appState.compare : appState.extra;
   const counts = state.working.workingCounts;
@@ -209,10 +210,28 @@ function runExtra() {
   appState.extra.reflection[0].selected = 'Survivors reproduce';
   submitExtraMode();
   assert(google.script.run.savedExtraPayload.history.length === 9, 'Extra should submit 9 history rows');
+  Math.random = defaultRandom;
+}
+function runEmergencySubmits() {
+  appState.compare = createCompareState();
+  appState.compare.prediction.choice = 'I am not sure yet.';
+  appState.compare.prediction.confidence = 'Not sure';
+  emergencySubmit('compare');
+  assert(google.script.run.savedEmergencyPayload.mode === 'compare', 'Compare emergency should include mode');
+  assert(google.script.run.savedEmergencyPayload.history.length === 2, 'Compare emergency should include both starting history rows');
+  assert(google.script.run.savedEmergencyPayload.summary.predictionChoice === 'I am not sure yet.', 'Compare emergency should preserve prediction');
+  assert(google.script.run.savedEmergencyPayload.summary.completedRounds === 0, 'Compare emergency should record partial progress');
+
+  appState.extra = createExtraState();
+  emergencySubmit('extra');
+  assert(google.script.run.savedEmergencyPayload.mode === 'extra', 'Extra emergency should include mode');
+  assert(google.script.run.savedEmergencyPayload.history.length === 1, 'Extra emergency should include starting history row');
+  assert(google.script.run.savedEmergencyPayload.summary.finalTotal === 20, 'Extra emergency should record current total');
 }
 runCompare();
 runExtra();
-console.log(JSON.stringify({ compare: 'passed', extra: 'passed' }, null, 2));
+runEmergencySubmits();
+console.log(JSON.stringify({ compare: 'passed', extra: 'passed', emergency: 'passed' }, null, 2));
 `;
 
 assert(duplicateIds.length === 0, 'Duplicate IDs: ' + duplicateIds.join(', '));
